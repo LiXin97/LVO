@@ -6,81 +6,10 @@
 #define LVO_ODOMETRY_HPP
 
 #include "common.hpp"
+#include "Feature.hpp"
 #include "StereoFrame.hpp"
 
 namespace LVO{
-
-    class FeaturesOb{
-    public:
-        FeaturesOb(const Eigen::Vector4d& left, const Eigen::Vector4d& right): LeftOb(left), RightOb(right){}
-        ~FeaturesOb() = default;
-
-        Eigen::Vector4d getLeftob(){return LeftOb;}
-        Eigen::Vector4d getRightob(){return RightOb;}
-
-    private:
-        Eigen::Vector4d LeftOb;
-        Eigen::Vector4d RightOb;
-    };
-
-    class FeaturesObs{
-    public:
-        FeaturesObs() = default;
-        ~FeaturesObs() = default;
-
-        void insert_ob(long id, FeaturesOb& ob)
-        {
-            obs.emplace(id, ob);
-        }
-
-        void insert_ob(long id, Eigen::Vector4d& left_ob, Eigen::Vector4d& right_ob)
-        {
-            FeaturesOb ob(left_ob, right_ob);
-            obs.emplace(id, ob);
-        }
-
-        void remove_frame(long id)
-        {
-            // TODO update the parameter
-            obs.erase(id);
-        }
-
-        void keep_frame(std::set<long> ids)
-        {
-            for(auto &ob:obs)
-            {
-                if(ids.count(ob.first) < 1)
-                {
-                    obs.erase(ob.first);
-                }
-            }
-        }
-
-        int num_obs()
-        {
-            return obs.size();
-        }
-
-
-
-//    private:
-        std::map<long, FeaturesOb> obs;  // < frame_id, observe >
-
-        // TODO Discrap
-    };
-
-    class Features3D{
-    public:
-        Features3D(const Eigen::Vector3d& left, const Eigen::Vector3d& right): LeftPoint(left), RightPoint(right){}
-        ~Features3D() = default;
-
-        Eigen::Vector3d getLeftPoint(){return LeftPoint;}
-        Eigen::Vector3d getRightPoint(){return RightPoint;}
-
-    private:
-        Eigen::Vector3d LeftPoint;
-        Eigen::Vector3d RightPoint;
-    };
 
     class Odometry{
     public:
@@ -106,7 +35,7 @@ namespace LVO{
             //TODO remove featrue add to Old_3D
         }
 
-        void keep_SW_frame( std::set<long> ids )
+        void keep_SW_frame( const std::set<long>& ids )
         {
             for(auto &feature:SW_features)
             {
@@ -123,9 +52,9 @@ namespace LVO{
             auto it = SW_features.find(feature_id);
             if(it == SW_features.end())
             {
-                FeaturesObs obs;
-                obs.insert_ob(frame_id, left_ob, right_ob);
-                SW_features.emplace(feature_id, obs);
+                LineFeature feature;
+                feature.insert_ob(frame_id, left_ob, right_ob);
+                SW_features.emplace(feature_id, feature);
             } else
             {
                 it->second.insert_ob(frame_id, left_ob, right_ob);
@@ -135,10 +64,11 @@ namespace LVO{
         void print_SWobs()
         {
             std::cout <<  "---------------------" << std::endl;
-            for(auto &obs:SW_features)
+            for(auto &feature:SW_features)
             {
-                std::cout << obs.first << " < ---";
-                for(auto &ob:obs.second.obs)
+                auto obs = feature.second.get_obs();
+                std::cout << feature.first << " < ---";
+                for(auto &ob:obs)
                 {
                     std::cout << " " << ob.first;
                 }
@@ -147,13 +77,14 @@ namespace LVO{
             std::cout <<  "---------------------" << std::endl;
         }
 
-        void insert_frame(StereoFrame& frame);
+        void input_frame(StereoFrame& frame);
 
     private:
-        std::map< long, StereoFrame > SW_frames;
+        std::map< long, StereoFrame > SW_frames;   // < frame_id, Frame >
+        std::map< long, StereoFrame > Old_frames;  // < frame_id, Frame >
 
-        std::map< long, FeaturesObs > SW_features;  // < feature_id, observes >
-        std::map< long, Features3D > Old_3Dfeatures;
+        std::map< long, LineFeature > SW_features;  // < feature_id, observes >
+        std::map< long, LineFeature3D > Old_3Dfeatures; // < feature_id, 3D points left right >
     };
 
 }
