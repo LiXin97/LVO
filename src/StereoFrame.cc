@@ -86,7 +86,6 @@ namespace LVO{
         return show;
     }
 
-
     // TODO 2 thread line extract
     StereoFrame::StereoFrame(
             long _StereoframeId,

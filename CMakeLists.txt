@@ -3,7 +3,6 @@ project(LVO)
 
 set(CMAKE_CXX_STANDARD 17)
 
-
 find_package(Pangolin REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
@@ -47,3 +46,9 @@ target_link_libraries(test_stereo_frame LVO_lib ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(test_mono_extract test/test_mono_extract.cc)
 target_link_libraries(test_mono_extract LVO_lib ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_stereo_tri test/test_stereo_tri.cc)
+target_link_libraries(test_stereo_tri LVO_lib ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_tuple test/test_tuple.cc)
+target_link_libraries(test_tuple LVO_lib ${CMAKE_THREAD_LIBS_INIT})
