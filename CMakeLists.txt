@@ -38,5 +38,12 @@ add_executable(LVO_EuRoc app/EuRoc.cc)
 target_link_libraries(LVO_EuRoc LVO_lib ${CMAKE_THREAD_LIBS_INIT})
 
 
+#TEST
 add_executable(test_FM test/test_feature_manger.cc)
 target_link_libraries(test_FM LVO_lib ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_stereo_frame test/test_stereo_frame.cc)
+target_link_libraries(test_stereo_frame LVO_lib ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_mono_extract test/test_mono_extract.cc)
+target_link_libraries(test_mono_extract LVO_lib ${CMAKE_THREAD_LIBS_INIT})

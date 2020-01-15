@@ -21,8 +21,11 @@
 #include <set>
 #include <unordered_map>
 #include <map>
+#include <string>
+#include <tuple>
+#include <stdexcept>
 
 
-#include "tic_toc.hpp"
+#include "include/utility/tic_toc.hpp"
 
 #endif //LVO_COMMON_HPP

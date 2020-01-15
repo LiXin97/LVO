@@ -22,10 +22,29 @@ namespace LVO{
         Eigen::Vector3d RightPoint;
     };
 
+    // TODO 打算左右目相机使用不同的id
     class LineFeatureOb{
     public:
-        LineFeatureOb(const Eigen::Vector4d& left, const Eigen::Vector4d& right): LeftOb(left), RightOb(right){}
+        LineFeatureOb(const Eigen::Vector4d& left, const Eigen::Vector4d& right): LeftOb(left), RightOb(right){ status = Stereo; }
+        explicit LineFeatureOb(const Eigen::Vector4d& ob, bool isleft = true)
+        {
+            if(isleft)
+            {
+                LeftOb = ob;
+                status = Left;
+            } else
+            {
+                RightOb = ob;
+                status = Right;
+            }
+        }
         ~LineFeatureOb() = default;
+
+        enum ObserveStatus {
+            Left = 0,    // only left see
+            Stereo,           // stereo see
+            Right          // only right see
+        };  // the status of observe
 
         Eigen::Vector4d getLeftob(){return LeftOb;}
         Eigen::Vector4d getRightob(){return RightOb;}
@@ -33,6 +52,8 @@ namespace LVO{
     private:
         Eigen::Vector4d LeftOb;
         Eigen::Vector4d RightOb;
+
+        ObserveStatus status = Left;
     };
 
     class LineFeature{
@@ -55,7 +76,12 @@ namespace LVO{
 
         void remove_frame(long id)
         {
+            // test
             // TODO update the parameter
+            if(id == obs.begin()->first)
+            {
+
+            }
             obs.erase(id);
         }
 
@@ -80,6 +106,9 @@ namespace LVO{
 
     private:
         std::map<long, LineFeatureOb> obs;  // < frame_id, observe >
+
+        Eigen::Matrix<double, 6, 1> plucker;  // plucker in 3D
+        // descriptor
     };
 }
 
