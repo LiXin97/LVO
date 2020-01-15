@@ -7,8 +7,8 @@
 #include <eigen3/Eigen/Dense>
 #include <iostream>
 using namespace Eigen;
-typedef Matrix<double,6,1> Vector6d;
-typedef Matrix<double,6,6> Matrix6d;
+typedef Eigen::Matrix<double,6,1> Vector6d;
+typedef Eigen::Matrix<double,6,6> Matrix6d;
 
 Eigen::Vector2d get_spherical_from_unit(Eigen::Vector3d& unit_n);
 

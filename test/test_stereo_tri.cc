@@ -4,6 +4,7 @@
 
 #include "common.hpp"
 #include "StereoFrame.hpp"
+#include "line_uti/line_geometry.hpp"
 
 std::string PathToSequence = "/home/lixin04/data/photo/V1_02_medium/mav0";
 const std::string ParameterFile = "../config/EuRoc_VR.yaml";
@@ -61,8 +62,14 @@ int main(int argc, char **argv) {
 
         Eigen::Matrix4d Trl;
 
+        Trl = Eigen::Matrix4d::Identity();
+        Trl(0,3) = -(0.105);
+
         LVO::StereoFrame stereoframe(ni, tframe, imLeftRect, paraml, imRightRect, paramr, Trl, stereoparam);
 
+        {
+
+        }
 
 
 ////        auto [ left_result, right_result ] = stereoframe.get_stereo_match();

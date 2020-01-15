@@ -25,11 +25,16 @@ namespace LVO{
 
         void remove_frame(long id)
         {
-            for(auto &feature:SW_features)
+            auto iter = SW_features.begin();
+            for(auto ite = iter; iter != SW_features.end(); ite = iter)
             {
-                feature.second.remove_frame(id);
-                if(feature.second.num_obs() < 1)
-                    SW_features.erase(feature.first);
+                iter++;
+                ite->second.remove_frame(id);
+                if(ite->second.num_obs() < 1)
+                {
+                    SW_features.erase(ite);
+                }
+//                std::cout << " SW_features.size() = " << SW_features.size() << std::endl;
             }
 
             //TODO remove featrue add to Old_3D
@@ -37,28 +42,43 @@ namespace LVO{
 
         void keep_SW_frame( const std::set<long>& ids )
         {
-            for(auto &feature:SW_features)
+            auto iter = SW_features.begin();
+            for(auto ite = iter; iter != SW_features.end(); ite = iter)
             {
-                feature.second.keep_frame(ids);
-                if(feature.second.num_obs() < 1)
-                    SW_features.erase(feature.first);
+                iter++;
+                ite->second.keep_frame(ids);
+                if(ite->second.num_obs() < 1)
+                {
+                    SW_features.erase(ite);
+                }
+//                std::cout << " SW_features.size() = " << SW_features.size() << std::endl;
             }
 
             //TODO remove featrue add to Old_3D
         }
 
-        void insert_ob(long feature_id, long frame_id, Eigen::Vector4d& left_ob, Eigen::Vector4d& right_ob)
+        void insert_ob(long feature_id, long frame_id, Eigen::Vector4d& observe)
         {
-            auto it = SW_features.find(feature_id);
-            if(it == SW_features.end())
+            if(SW_features.count(feature_id) == 0)
             {
                 LineFeature feature;
-                feature.insert_ob(frame_id, left_ob, right_ob);
+                feature.insert_ob(frame_id, observe);
                 SW_features.emplace(feature_id, feature);
             } else
             {
-                it->second.insert_ob(frame_id, left_ob, right_ob);
+                SW_features[feature_id].insert_ob(frame_id, observe);
             }
+
+//            auto it = SW_features.find(feature_id);
+//            if(it == SW_features.end())
+//            {
+//                LineFeature feature;
+//                feature.insert_ob(frame_id, observe);
+//                SW_features.emplace(feature_id, feature);
+//            } else
+//            {
+//                it->second.insert_ob(frame_id, observe);
+//            }
         }
 
         void print_SWobs()
@@ -80,8 +100,9 @@ namespace LVO{
         void input_frame(StereoFrame& frame);
 
     private:
-        std::map< long, StereoFrame > SW_frames;   // < frame_id, Frame >
-        std::map< long, StereoFrame > Old_frames;  // < frame_id, Frame >
+        // 滑窗存的是单目的frame
+        std::map< long, Frame > SW_frames;   // < frame_id, Frame >
+        std::map< long, Frame > Old_frames;  // < frame_id, Frame >
 
         std::map< long, LineFeature > SW_features;  // < feature_id, observes >
         std::map< long, LineFeature3D > Old_3Dfeatures; // < feature_id, 3D points left right >

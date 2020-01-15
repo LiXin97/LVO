@@ -30,6 +30,10 @@ namespace LVO
 
         cv::Mat get_img(){return img.clone();}
 
+        void setTwc(const Eigen::Matrix4d& Twc_input){ Twc = Twc_input; }
+
+        Eigen::Matrix4d getTwc(){return Twc;}
+
         std::vector<cv::line_descriptor::KeyLine> get_line_extract(){return keyline;}
         cv::Mat get_lbd(){return keylbd_descr.clone();};
 

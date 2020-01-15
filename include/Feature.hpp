@@ -7,8 +7,11 @@
 
 
 #include "common.hpp"
+#include "line_uti/line_geometry.hpp"
 
 namespace LVO{
+    class Frame;
+
     class LineFeature3D{
     public:
         LineFeature3D(const Eigen::Vector3d& left, const Eigen::Vector3d& right): LeftPoint(left), RightPoint(right){}
@@ -22,39 +25,56 @@ namespace LVO{
         Eigen::Vector3d RightPoint;
     };
 
-    // TODO 打算左右目相机使用不同的id
     class LineFeatureOb{
     public:
-        LineFeatureOb(const Eigen::Vector4d& left, const Eigen::Vector4d& right): LeftOb(left), RightOb(right){ status = Stereo; }
-        explicit LineFeatureOb(const Eigen::Vector4d& ob, bool isleft = true)
+        LineFeatureOb(const Eigen::Vector4d& ob)
         {
-            if(isleft)
-            {
-                LeftOb = ob;
-                status = Left;
-            } else
-            {
-                RightOb = ob;
-                status = Right;
-            }
+            observe4d = ob;
         }
+        LineFeatureOb() = default;
         ~LineFeatureOb() = default;
 
-        enum ObserveStatus {
-            Left = 0,    // only left see
-            Stereo,           // stereo see
-            Right          // only right see
-        };  // the status of observe
-
-        Eigen::Vector4d getLeftob(){return LeftOb;}
-        Eigen::Vector4d getRightob(){return RightOb;}
+        Eigen::Vector4d get4dob(){return observe4d;}
+        Eigen::Vector3d get3dob0(){return Eigen::Vector3d(observe4d(0), observe4d(1), 1.);}
+        Eigen::Vector3d get3dob1(){return Eigen::Vector3d(observe4d(2), observe4d(3), 1.);}
 
     private:
-        Eigen::Vector4d LeftOb;
-        Eigen::Vector4d RightOb;
-
-        ObserveStatus status = Left;
+        Eigen::Vector4d observe4d;
     };
+
+    // 这种双目的类，好像不好用
+//    class LineFeatureOb{
+//    public:
+//        LineFeatureOb(const Eigen::Vector4d& left, const Eigen::Vector4d& right): LeftOb(left), RightOb(right){ status = Stereo; }
+//        explicit LineFeatureOb(const Eigen::Vector4d& ob, bool isleft = true)
+//        {
+//            if(isleft)
+//            {
+//                LeftOb = ob;
+//                status = Left;
+//            } else
+//            {
+//                RightOb = ob;
+//                status = Right;
+//            }
+//        }
+//        ~LineFeatureOb() = default;
+//
+//        enum ObserveStatus {
+//            Left = 0,    // only left see
+//            Stereo,           // stereo see
+//            Right          // only right see
+//        };  // the status of observe
+//
+//        Eigen::Vector4d getLeftob(){return LeftOb;}
+//        Eigen::Vector4d getRightob(){return RightOb;}
+//
+//    private:
+//        Eigen::Vector4d LeftOb;
+//        Eigen::Vector4d RightOb;
+//
+//        ObserveStatus status = Left;
+//    };
 
     class LineFeature{
     public:
@@ -63,15 +83,17 @@ namespace LVO{
 
         LineFeature3D get3D();
 
-        void insert_ob(long id, LineFeatureOb& ob)
+        void insert_ob(long id, const LineFeatureOb& ob)
         {
             obs.emplace(id, ob);
         }
 
-        void insert_ob(long id, Eigen::Vector4d& left_ob, Eigen::Vector4d& right_ob)
+        void insert_ob(long stereo_id, const Eigen::Vector4d& left_ob, const Eigen::Vector4d& right_ob)
         {
-            LineFeatureOb ob(left_ob, right_ob);
-            obs.emplace(id, ob);
+            LineFeatureOb ob_l(left_ob);
+            LineFeatureOb ob_r(right_ob);
+            obs.emplace(stereo_id*2, ob_l);
+            obs.emplace(stereo_id*2+1, ob_r);
         }
 
         void remove_frame(long id)
@@ -101,11 +123,15 @@ namespace LVO{
             return obs.size();
         }
 
+        std::tuple< bool, double > tri_two_plane( const std::map<long, Eigen::Matrix4d>& frame_map );
+
         std::map<long, LineFeatureOb> get_obs(){return obs;}
 
 
     private:
         std::map<long, LineFeatureOb> obs;  // < frame_id, observe >
+
+        double mini_tri_angle = 1.5;
 
         Eigen::Matrix<double, 6, 1> plucker;  // plucker in 3D
         // descriptor

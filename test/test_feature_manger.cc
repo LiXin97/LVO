@@ -23,14 +23,20 @@ int main()
 
     for(auto &it:feature_frame)
     {
-        Eigen::Vector4d left, right;
-        odo.insert_ob(it.first, it.second, left, right);
+        Eigen::Vector4d observe;
+        odo.insert_ob(it.first, it.second, observe);
     }
     odo.print_SWobs();
 
 //    odo.remove_frame(0);
+//    std::cout << "remove 0 over" << std::endl;
+//    odo.print_SWobs();
 //    odo.remove_frame(1);
+//    std::cout << "remove 1 over" << std::endl;
+//    odo.print_SWobs();
 //    odo.remove_frame(2);
+//    std::cout << "remove 2 over" << std::endl;
+//    odo.print_SWobs();
 //    odo.remove_frame(10);
 //    odo.print_SWobs();
 
