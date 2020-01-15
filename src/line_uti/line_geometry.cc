@@ -1,7 +1,7 @@
 //
 // Created by hyj on 17-12-8.
 //
-#include "line_geometry.hpp"
+#include "include/line_uti/line_geometry.hpp"
 
 Eigen::Vector2d get_spherical_from_unit(Eigen::Vector3d& unit_n)
 {

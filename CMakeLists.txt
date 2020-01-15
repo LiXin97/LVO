@@ -21,7 +21,7 @@ INCLUDE_DIRECTORIES(
         include/
 )
 
-file(GLOB SOURCEFILES src/*.cc include/*.hpp)
+file(GLOB SOURCEFILES src/*.cc include/*.hpp src/*/*cc )
 
 add_library(LVO_lib SHARED ${SOURCEFILES})
 
@@ -52,3 +52,6 @@ target_link_libraries(test_stereo_tri LVO_lib ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(test_tuple test/test_tuple.cc)
 target_link_libraries(test_tuple ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_tri_angle test/test_tri_angle.cc)
+target_link_libraries(test_tri_angle LVO_lib ${CMAKE_THREAD_LIBS_INIT})

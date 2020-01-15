@@ -131,7 +131,10 @@ namespace LVO{
     private:
         std::map<long, LineFeatureOb> obs;  // < frame_id, observe >
 
-        double mini_tri_angle = 1.5;
+        double mini_tri_angle = 2.;
+
+        // TODO 生命周期过长的特征直接删除？
+        int age = 1;
 
         Eigen::Matrix<double, 6, 1> plucker;  // plucker in 3D
         // descriptor

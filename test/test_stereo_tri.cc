@@ -4,8 +4,11 @@
 
 #include "common.hpp"
 #include "StereoFrame.hpp"
+#include "Feature.hpp"
 #include "line_uti/line_geometry.hpp"
+#include <opencv2/core/eigen.hpp>
 
+//std::string PathToSequence = "/home/lixin04/data/photo/MH_05";
 std::string PathToSequence = "/home/lixin04/data/photo/V1_02_medium/mav0";
 const std::string ParameterFile = "../config/EuRoc_VR.yaml";
 
@@ -13,10 +16,46 @@ void LoadStereoCalib( const std::string& ParameterFile, cv::Mat& M1l,cv::Mat& M1
 void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &vstrImageLeft,
                 std::vector<std::string> &vstrImageRight, std::vector<double> &vTimestamps);
 
+void print_T01()
+{
+    cv::FileStorage fsSettings(ParameterFile, cv::FileStorage::READ);
+    cv::Mat cv_T0;
+    fsSettings["body_T_cam0"] >> cv_T0;
+    Eigen::Matrix4d TI0;
+    cv::cv2eigen(cv_T0, TI0);
 
 
-int main(int argc, char **argv) {
+    cv::Mat cv_T1;
+    fsSettings["body_T_cam1"] >> cv_T1;
+    Eigen::Matrix4d TI1;
+    cv::cv2eigen(cv_T1, TI1);
 
+    std::cout << TI0.inverse()*TI1 << std::endl;
+
+//    0.999997  -0.00231714 -0.000343393     0.110074
+//    0.00231207     0.999898   -0.0140907 -0.000156612
+//    0.000376008    0.0140898     0.999901  0.000889383
+//    0            0            0            1
+}
+
+Eigen::Vector4d Getobserve4d( const Eigen::Vector2d& startPoint, const Eigen::Vector2d& endPoint )
+{
+    cv::FileStorage fsSettings(ParameterFile, cv::FileStorage::READ);
+    double fx, fy, cx, cy;
+    fx = fsSettings["Camera.fx"];
+    fy = fsSettings["Camera.fy"];
+    cx = fsSettings["Camera.cx"];
+    cy = fsSettings["Camera.cy"];
+
+    return Eigen::Vector4d( ( startPoint(0) - cx )/fx,
+                            ( startPoint(1) - cy )/fy,
+                            ( endPoint(0) - cx )/fx,
+                            ( endPoint(1) - cy )/fy);
+}
+
+int main(int argc, char **argv)
+{
+//    print_T01(); return 0;
     // Retrieve paths to images
     std::vector<std::string> vstrImageLeft;
     std::vector<std::string> vstrImageRight;
@@ -25,6 +64,7 @@ int main(int argc, char **argv) {
 
     cv::Mat M1l,M2l,M1r,M2r;
     LoadStereoCalib(ParameterFile, M1l ,M1r ,M2l ,M2r);
+
 
     const int nImages = static_cast<const int>(vstrImageLeft.size());
 
@@ -61,24 +101,52 @@ int main(int argc, char **argv) {
         LVO::StereoMatchParam stereoparam;
 
         Eigen::Matrix4d Trl;
-
         Trl = Eigen::Matrix4d::Identity();
-        Trl(0,3) = -(0.105);
+        Trl(0,3) = -(0.110074);
+
+        Eigen::Matrix4d Tlr;
+        Tlr = Eigen::Matrix4d::Identity();
+        Tlr(0,3) = (0.110074);
 
         LVO::StereoFrame stereoframe(ni, tframe, imLeftRect, paraml, imRightRect, paramr, Trl, stereoparam);
 
+        Eigen::Matrix4d Twc0 = Eigen::Matrix4d::Identity();
+        std::map<long, Eigen::Matrix4d> Twcs;
+        Twcs.emplace( ni*2, Twc0 );
+        Twcs.emplace( ni*2+1, Tlr );
         {
+            std::vector<LVO::LineFeature> linefeatures;
+            std::vector<cv::line_descriptor::KeyLine> left_lines, right_lines;
+            std::tie(left_lines, right_lines) = stereoframe.get_stereo_match_line();
+            for(int index = 0; index < left_lines.size(); ++index)
+            {
+                auto &left_line = left_lines[index];
+                Eigen::Vector2d leftstartPoint(left_line.startPointX, left_line.startPointY);
+                Eigen::Vector2d leftendPoint(left_line.endPointX, left_line.endPointY);
 
+                auto &right_line = right_lines[index];
+                Eigen::Vector2d rightstartPoint(right_line.startPointX, right_line.startPointY);
+                Eigen::Vector2d rightendPoint(right_line.endPointX, right_line.endPointY);
+
+                Eigen::Vector4d left_ob = Getobserve4d(leftstartPoint, leftendPoint), right_ob = Getobserve4d(rightstartPoint, rightendPoint);
+                LVO::LineFeature linefeature;
+                linefeature.insert_ob(ni, left_ob, right_ob);
+                bool tri_flag; double tri_plane_angle;
+                std::tie(tri_flag, tri_plane_angle) = linefeature.tri_two_plane( Twcs );
+                if(tri_flag)
+                    std::cout << "tri_plane_angle = " << tri_plane_angle << std::endl;
+                linefeatures.push_back(linefeature);
+            }
         }
 
 
 ////        auto [ left_result, right_result ] = stereoframe.get_stereo_match();
-//        cv::Mat left_result, right_result;
-//        std::tie( left_result, right_result ) = stereoframe.get_stereo_match();
+        cv::Mat left_result, right_result;
+        std::tie( left_result, right_result ) = stereoframe.get_stereo_match();
 //
 //
-//        cv::imshow("left_result", left_result);
-//        cv::imshow("right_result", right_result);
+        cv::imshow("left_result", left_result);
+        cv::imshow("right_result", right_result);
 
         if(cv::waitKey(  ) == 27) break;
 

@@ -69,6 +69,11 @@ namespace LVO
         void match_stereo_line();
 
         std::tuple<cv::Mat ,cv::Mat> get_stereo_match();
+        
+        std::tuple< std::vector<cv::line_descriptor::KeyLine>, std::vector<cv::line_descriptor::KeyLine> > get_stereo_match_line()
+        {
+            return std::make_tuple( left_match_lines, right_match_lines );
+        }
 
     private:
         long TimeStamp;

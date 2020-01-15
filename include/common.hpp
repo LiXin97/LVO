@@ -26,6 +26,7 @@
 #include <stdexcept>
 
 
-#include "include/utility/tic_toc.hpp"
+#include "utility/tic_toc.hpp"
+#include "utility/utility.hpp"
 
 #endif //LVO_COMMON_HPP
