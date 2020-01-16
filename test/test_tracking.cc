@@ -1,9 +1,10 @@
 //
-// Created by lixin04 on 20年1月15日.
+// Created by lixin04 on 20年1月16日.
 //
 
 #include "common.hpp"
 #include "StereoFrame.hpp"
+#include "Odometry.hpp"
 #include "Feature.hpp"
 #include "line_uti/line_geometry.hpp"
 #include <opencv2/core/eigen.hpp>
@@ -73,6 +74,8 @@ int main(int argc, char **argv)
     int begin = 200;
     int end   = 1500;
 
+    LVO::Odometry odo;
+
     std::vector<cv::Mat> T_all;
     std::vector<long> Time_all;
     // Main loop
@@ -99,58 +102,10 @@ int main(int argc, char **argv)
 
         std::shared_ptr<LVO::MonoParam> paraml = std::make_shared< LVO::MonoParam >(), paramr = std::make_shared< LVO::MonoParam >();
         std::shared_ptr<LVO::StereoMatchParam> stereoparam = std::make_shared< LVO::StereoMatchParam >();
+        std::shared_ptr< LVO::StereoFrame > stereoframe = std::make_shared< LVO::StereoFrame >(ni, tframe, imLeftRect, paraml, imRightRect, paramr, stereoparam);
+        odo.input_frame(stereoframe);
 
-        Eigen::Matrix4d Trl;
-        Trl = Eigen::Matrix4d::Identity();
-        Trl(0,3) = -(0.110074);
-
-        Eigen::Matrix4d Tlr;
-        Tlr = Eigen::Matrix4d::Identity();
-        Tlr(0,3) = (0.110074);
-
-
-        std::shared_ptr< LVO::StereoFrame > stereoframe = std::make_shared< LVO::StereoFrame >(ni, tframe, imLeftRect, paraml, imRightRect, paramr, Trl, stereoparam);
-
-        Eigen::Matrix4d Twc0 = Eigen::Matrix4d::Identity();
-        std::map<long, Eigen::Matrix4d> Twcs;
-        Twcs.emplace( ni*2, Twc0 );
-        Twcs.emplace( ni*2+1, Tlr );
-        {
-            std::vector<LVO::LineFeature> linefeatures;
-            std::vector<cv::line_descriptor::KeyLine> left_lines, right_lines;
-            cv::Mat descri;
-            std::tie(left_lines, right_lines, descri) = stereoframe->get_stereo_match_line();
-            for(int index = 0; index < left_lines.size(); ++index)
-            {
-                auto &left_line = left_lines[index];
-                Eigen::Vector2d leftstartPoint(left_line.startPointX, left_line.startPointY);
-                Eigen::Vector2d leftendPoint(left_line.endPointX, left_line.endPointY);
-
-                auto &right_line = right_lines[index];
-                Eigen::Vector2d rightstartPoint(right_line.startPointX, right_line.startPointY);
-                Eigen::Vector2d rightendPoint(right_line.endPointX, right_line.endPointY);
-
-                Eigen::Vector4d left_ob = Getobserve4d(leftstartPoint, leftendPoint), right_ob = Getobserve4d(rightstartPoint, rightendPoint);
-                LVO::LineFeature linefeature;
-                linefeature.insert_ob(ni, left_ob, right_ob);
-                bool tri_flag; double tri_plane_angle;
-                std::tie(tri_flag, tri_plane_angle) = linefeature.tri_two_plane( Twcs );
-                if(tri_flag)
-                    std::cout << "tri_plane_angle = " << tri_plane_angle << std::endl;
-                linefeatures.push_back(linefeature);
-            }
-        }
-
-
-////        auto [ left_result, right_result ] = stereoframe.get_stereo_match();
-        cv::Mat left_result, right_result;
-        std::tie( left_result, right_result ) = stereoframe->get_stereo_match();
-//
-//
-        cv::imshow("left_result", left_result);
-        cv::imshow("right_result", right_result);
-
-        if(cv::waitKey(  ) == 27) break;
+        if(cv::waitKey( 1 ) == 27) break;
 
     }
 

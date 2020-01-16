@@ -9,17 +9,17 @@ namespace LVO{
             long _FrameId,
             long _TimeStamp,
             const cv::Mat& Img,
-            const MonoParam& param
+            const std::shared_ptr< MonoParam >& param
             ) : timestamp(_TimeStamp), img_src(Img), frame_id(_FrameId), mono_param(param)
     {
         img = img_src.clone();
-        if(mono_param.equalize)
+        if(mono_param->equalize)
         {
             cv::equalizeHist(img, img);
         }
 
 
-        switch (mono_param.line_extract_type)
+        switch (mono_param->line_extract_type)
         {
             case LineExtractType::LSD :
                 extract_line_lsd();
@@ -41,12 +41,12 @@ namespace LVO{
         lsd_detector = cv::line_descriptor::LSDDetector::createLSDDetector();
         lsd_detector->detect( img, line, 2, 2 );
 
-        if(line.size() > mono_param.MaxNumLineFeatures)
+        if(line.size() > mono_param->MaxNumLineFeatures)
         {
             std::sort( line.begin(), line.end(),
                     [](cv::line_descriptor::KeyLine a, cv::line_descriptor::KeyLine b){ return a.response > b.response; }
                     );
-            line.resize(mono_param.MaxNumLineFeatures);
+            line.resize(mono_param->MaxNumLineFeatures);
         }
 
 
@@ -91,15 +91,14 @@ namespace LVO{
             long _StereoframeId,
             long _TimeStamp,
             const cv::Mat& _LeftImg,
-            const MonoParam& leftparam,
+            const std::shared_ptr< MonoParam >& leftparam,
             const cv::Mat& _RightImg,
-            const MonoParam& rightparam,
-            const Eigen::Matrix4d& Trl,
-            const StereoMatchParam& stereoparam
-            ): stereo_param(stereoparam), TimeStamp(_TimeStamp),
-            left(_StereoframeId*2, _TimeStamp, _LeftImg, leftparam),
-            right(_StereoframeId*2 + 1, _TimeStamp, _RightImg, rightparam)
+            const std::shared_ptr< MonoParam >& rightparam,
+            const std::shared_ptr< StereoMatchParam >& stereoparam
+            ): stereo_param(stereoparam), TimeStamp(_TimeStamp), StereoFrameId(_StereoframeId)
     {
+        left = std::make_shared<Frame>(_StereoframeId*2, _TimeStamp, _LeftImg, leftparam);
+        right = std::make_shared<Frame>(_StereoframeId*2 + 1, _TimeStamp, _RightImg, rightparam);
         //stereo match
         match_stereo_line();
     }
@@ -110,10 +109,10 @@ namespace LVO{
         cv::Ptr<cv::line_descriptor::BinaryDescriptorMatcher> bdm_;
         bdm_ = cv::line_descriptor::BinaryDescriptorMatcher::createBinaryDescriptorMatcher();
 
-        auto keyline_l = left.get_line_extract();
-        auto keyline_r = right.get_line_extract();
-        cv::Mat lbd_l = left.get_lbd();
-        cv::Mat lbd_r = right.get_lbd();
+        auto keyline_l = left->get_line_extract();
+        auto keyline_r = right->get_line_extract();
+        cv::Mat lbd_l = left->get_lbd();
+        cv::Mat lbd_r = right->get_lbd();
         bdm_->match(lbd_l, lbd_r, lsd_matches);
 
         /* select best matches */
@@ -122,7 +121,7 @@ namespace LVO{
         good_matchesLR.clear();
         for (auto & lsd_matche : lsd_matches)
         {
-            if( lsd_matche.distance < stereo_param.match_dist_thread ){
+            if( lsd_matche.distance < stereo_param->match_dist_thread ){
 
                 cv::DMatch mt = lsd_matche;
                 cv::line_descriptor::KeyLine line1 =  keyline_l[mt.queryIdx] ;
@@ -140,6 +139,16 @@ namespace LVO{
         for (auto mt : good_matchesLR) {
             left_match_lines.push_back( keyline_l[mt.queryIdx] );
             right_match_lines.push_back( keyline_r[mt.trainIdx] );
+            {
+                Eigen::Vector2d leftstartPoint(keyline_l[mt.queryIdx].startPointX, keyline_l[mt.queryIdx].startPointY);
+                Eigen::Vector2d leftendPoint(keyline_l[mt.queryIdx].endPointX, keyline_l[mt.queryIdx].endPointY);
+                left_match_obs.push_back( left->get_monoparam()->Getobserve4d(leftstartPoint, leftendPoint) );
+
+                Eigen::Vector2d rightstartPoint(keyline_r[mt.trainIdx].startPointX, keyline_r[mt.trainIdx].startPointY);
+                Eigen::Vector2d rightendPoint(keyline_r[mt.trainIdx].endPointX, keyline_r[mt.trainIdx].endPointY);
+                right_match_obs.push_back( right->get_monoparam()->Getobserve4d(rightstartPoint, rightendPoint) );
+            }
+
             stereo_lines_left.insert(mt.queryIdx);
             stereo_lines_right.insert(mt.trainIdx);
             // TODO 描述子取平均
@@ -150,14 +159,24 @@ namespace LVO{
         {
             if(stereo_lines_left.count(index) > 0) continue;
             left_un_match_lines.push_back(keyline_l[index]);
-            lbd_left_descr_remiand.push_back( lbd_l.row(index) );
+            lbd_left_descr_remains.push_back( lbd_l.row(index) );
+            {
+                Eigen::Vector2d leftstartPoint(keyline_l[index].startPointX, keyline_l[index].startPointY);
+                Eigen::Vector2d leftendPoint(keyline_l[index].endPointX, keyline_l[index].endPointY);
+                left_un_match_obs.push_back( left->get_monoparam()->Getobserve4d(leftstartPoint, leftendPoint) );
+            }
         }
 
         for(int index=0;index<keyline_r.size();++index)
         {
             if(stereo_lines_right.count(index) > 0) continue;
             right_un_match_lines.push_back(keyline_r[index]);
-            lbd_right_descr_remiand.push_back( lbd_r.row(index) );
+            lbd_right_descr_remains.push_back( lbd_r.row(index) );
+            {
+                Eigen::Vector2d rightstartPoint(keyline_r[index].startPointX, keyline_r[index].startPointY);
+                Eigen::Vector2d rightendPoint(keyline_r[index].endPointX, keyline_r[index].endPointY);
+                right_un_match_obs.push_back( right->get_monoparam()->Getobserve4d(rightstartPoint, rightendPoint) );
+            }
         }
 
     }
@@ -166,9 +185,9 @@ namespace LVO{
     {
 
 
-        cv::Mat show_left = left.get_img();
+        cv::Mat show_left = left->get_img();
         if(show_left.channels() != 3) cv::cvtColor(show_left, show_left, cv::COLOR_GRAY2BGR);
-        cv::Mat show_right = right.get_img();
+        cv::Mat show_right = right->get_img();
         if(show_right.channels() != 3) cv::cvtColor(show_right, show_right, cv::COLOR_GRAY2BGR);
 
 

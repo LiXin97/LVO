@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(LVO)
 
 set(CMAKE_CXX_STANDARD 17)
+SET(CMAKE_BUILD_TYPE Release)
 
 find_package(Pangolin REQUIRED)
 find_package(OpenCV REQUIRED)
@@ -55,3 +56,6 @@ target_link_libraries(test_tuple ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(test_tri_angle test/test_tri_angle.cc)
 target_link_libraries(test_tri_angle LVO_lib ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_tracking test/test_tracking.cc)
+target_link_libraries(test_tracking LVO_lib ${CMAKE_THREAD_LIBS_INIT})

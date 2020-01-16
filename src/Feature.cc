@@ -6,9 +6,48 @@
 
 namespace LVO{
 
-    LineFeature3D LineFeature::get3D()
+    LineFeature3D LineFeature::get3D( const Eigen::Matrix4d& Twc  )
     {
+        Eigen::Vector3d twc = Twc.block(0, 3, 3, 1);
+        Eigen::Matrix3d Rwc = Twc.block(0, 0, 3, 3);
 
+
+        Eigen::Vector3d nc = plucker_cam.head(3);
+        Eigen::Vector3d vc = plucker_cam.tail(3);
+        Matrix4d Lc;
+        Lc << skew_symmetric(nc), vc, -vc.transpose(), 0;
+
+
+        auto id_obs_0 = obs.begin();
+
+        Eigen::Vector3d ob00 = id_obs_0->second.get3dob0();
+        Eigen::Vector3d ob01 = id_obs_0->second.get3dob1();
+        Vector2d ln = ( ob00.cross(ob01) ).head(2);     // 直线的垂直方向
+        ln = ln / ln.norm();
+
+        Eigen::Vector3d p12 = Vector3d(ob00(0) + ln(0), ob00(1) + ln(1), 1.0);  // 直线垂直方向上移动一个单位
+        Eigen::Vector3d p22 = Vector3d(ob01(0) + ln(0), ob01(1) + ln(1), 1.0);
+        Eigen::Vector3d cam = Vector3d( 0, 0, 0 );
+
+        Eigen::Vector4d pi1 = pi_from_ppp(cam, ob00, p12);
+        Eigen::Vector4d pi2 = pi_from_ppp(cam, ob01, p22);
+
+        Eigen::Vector4d e1 = Lc * pi1;
+        Eigen::Vector4d e2 = Lc * pi2;
+        e1 = e1/e1(3);
+        e2 = e2/e2(3);
+
+        double length = (e1-e2).norm();
+        if(length > 10) {std::cerr << " length = " << length << std::endl;}
+
+        //std::cout << e1 <<"\n\n";
+        Eigen::Vector3d pts_1(e1(0),e1(1),e1(2));
+        Eigen::Vector3d pts_2(e2(0),e2(1),e2(2));
+
+        Eigen::Vector3d w_pts_1 =  Rwc * pts_1 + twc;
+        Eigen::Vector3d w_pts_2 =  Rwc * pts_2 + twc;
+
+        return LineFeature3D(w_pts_1, w_pts_2);
     }
 
     std::tuple< bool, double > LineFeature::tri_two_plane( const std::map<long, Eigen::Matrix4d>& frame_map )
@@ -68,16 +107,16 @@ namespace LVO{
 
             if( max_theta < mini_tri_angle ) return std::make_tuple(false, max_theta);
 
-            Vector6d line_c = pipi_plk(p00, best_p);  // initial 3d line in camera frame
+            plucker_cam = pipi_plk(p00, best_p);  // initial 3d line in camera frame
 
 
-            Eigen::Vector3d nc = line_c.head(3);
-            Eigen::Vector3d vc = line_c.tail(3);
-            Eigen::Vector3d nw = Rwc0 * nc + Utility::skewSymmetric(twc0) * Rwc0 * vc;
-            Eigen::Vector3d vw = Rwc0 * vc;
-
-            plucker.head(3) = nw;
-            plucker.tail(3) = vw;
+//            Eigen::Vector3d nc = line_c.head(3);
+//            Eigen::Vector3d vc = line_c.tail(3);
+//            Eigen::Vector3d nw = Rwc0 * nc + Utility::skewSymmetric(twc0) * Rwc0 * vc;
+//            Eigen::Vector3d vw = Rwc0 * vc;
+//
+//            plucker.head(3) = nw;
+//            plucker.tail(3) = vw;
 
             return std::make_tuple(true, max_theta);
         }

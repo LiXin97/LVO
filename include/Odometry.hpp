@@ -16,6 +16,15 @@ namespace LVO{
         Odometry()= default;
         ~Odometry() = default;
 
+        enum OdoState
+        {
+            UNINIT = -1,
+            OK,
+            LOST
+        };
+
+        void tracking();
+
         void track_LastKeyframe();
         void track_SW();
 
@@ -68,17 +77,6 @@ namespace LVO{
             {
                 SW_features[feature_id].insert_ob(frame_id, observe);
             }
-
-//            auto it = SW_features.find(feature_id);
-//            if(it == SW_features.end())
-//            {
-//                LineFeature feature;
-//                feature.insert_ob(frame_id, observe);
-//                SW_features.emplace(feature_id, feature);
-//            } else
-//            {
-//                it->second.insert_ob(frame_id, observe);
-//            }
         }
 
         void print_SWobs()
@@ -97,12 +95,20 @@ namespace LVO{
             std::cout <<  "---------------------" << std::endl;
         }
 
-        void input_frame(StereoFrame& frame);
+        void input_frame(std::shared_ptr<StereoFrame>& stereoframe);
 
     private:
         // 滑窗存的是单目的frame
-        std::map< long, Frame > SW_frames;   // < frame_id, Frame >
-        std::map< long, Frame > Old_frames;  // < frame_id, Frame >
+        std::map< long, std::shared_ptr<Frame> > SW_frames;   // < frame_id, Frame >
+//        std::map< long, std::shared_ptr<Frame> > Old_frames;  // < frame_id, Frame >
+
+        // shared_ptr
+        std::shared_ptr<StereoFrame> last_key_frame;
+        std::shared_ptr<StereoFrame> cur_frame;
+
+        OdoState state = OdoState::UNINIT;
+
+        static long feature_id;
 
         std::map< long, LineFeature > SW_features;  // < feature_id, observes >
         std::map< long, LineFeature3D > Old_3Dfeatures; // < feature_id, 3D points left right >
