@@ -26,10 +26,24 @@ namespace LVO{
         void tracking();
 
         void track_LastKeyframe();
-        void track_SW();
+        bool track_motion_mode();
+        bool track_sw();
 
         void optimization_SW();
         void optimization_CurPose();
+
+        void update_velocity();
+
+        std::map< int, int > matchNNR(const cv::Mat &desc1, const cv::Mat &desc2, float nnr = 0.75);
+
+
+        // DeBUG
+        void show_match(
+                std::map<int, int> &match_result,
+                std::vector<Eigen::Vector4d> &cur_lines_pixel,
+                std::vector<Eigen::Vector4d> &last_lines_pixel,
+                std::vector< long >& cur_frame_id,
+                std::vector< long >& last_frame_id );
 
 
         void remove_frame(long id)
@@ -99,16 +113,23 @@ namespace LVO{
 
     private:
         // 滑窗存的是单目的frame
-        std::map< long, std::shared_ptr<Frame> > SW_frames;   // < frame_id, Frame >
+//        std::map< long, std::shared_ptr<Frame> > SW_frames;   // < frame_id, Frame >
 //        std::map< long, std::shared_ptr<Frame> > Old_frames;  // < frame_id, Frame >
 
+        std::map< long, Eigen::Matrix4d > SW_frames;   // < frame_id, Frame >
+        std::map< long, Eigen::Matrix4d > Old_frames;  // < frame_id, Frame >
         // shared_ptr
         std::shared_ptr<StereoFrame> last_key_frame;
+        std::shared_ptr<StereoFrame> last_frame;
         std::shared_ptr<StereoFrame> cur_frame;
 
         OdoState state = OdoState::UNINIT;
 
+        Eigen::Matrix4d motion_velocity;
+
         static long feature_id;
+
+        OdoParam odoParam;
 
         std::map< long, LineFeature > SW_features;  // < feature_id, observes >
         std::map< long, LineFeature3D > Old_3Dfeatures; // < feature_id, 3D points left right >

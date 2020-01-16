@@ -38,6 +38,14 @@ namespace LVO{
                                     ( PointObserve(2) - cx )/fx,
                                     ( PointObserve(3) - cy )/fy);
         }
+        
+        Eigen::Vector4d GetPixel4d( const Eigen::Vector4d& observe )
+        {
+            return Eigen::Vector4d( ( observe(0) * fx )+cx,
+                                    ( observe(1) * fy )+cy,
+                                    ( observe(2) * fx )+cx,
+                                    ( observe(3) * fy )+cy);
+        }
 
 
         bool equalize = true;
@@ -71,6 +79,20 @@ namespace LVO{
 
         float match_dist_thread = 30;
         Eigen::Matrix4d Tlr;
+
+//    private:
+
+    };
+
+    class OdoParam{
+    public:
+        OdoParam()
+        {
+        }
+
+
+
+        float match_dist_thread = 30;
 
 //    private:
 

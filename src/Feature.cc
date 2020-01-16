@@ -117,6 +117,7 @@ namespace LVO{
 //
 //            plucker.head(3) = nw;
 //            plucker.tail(3) = vw;
+            tri = true;
 
             return std::make_tuple(true, max_theta);
         }

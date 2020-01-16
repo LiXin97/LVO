@@ -16,6 +16,14 @@ std::tuple<double, char, std::string> get_student(int id)
     throw std::invalid_argument("id");
 }
 
+std::tuple<double, char, std::string, int> get_sdtudent(int id)
+{
+    if (id == 0) return std::make_tuple(3.8, 'A', "Lisa Simpson", 0);
+    if (id == 1) return std::make_tuple(2.9, 'C', "Milhouse Van Houten", 1);
+    if (id == 2) return std::make_tuple(1.7, 'D', "Ralph Wiggum", 2);
+    throw std::invalid_argument("id");
+}
+
 void test_const_cout(const std::map<long, bool>& long_bool_map)
 {
     auto iter = long_bool_map.find(100);

@@ -4,7 +4,9 @@
 
 #include "StereoFrame.hpp"
 
-namespace LVO{
+namespace LVO
+{
+
     Frame::Frame(
             long _FrameId,
             long _TimeStamp,
@@ -136,48 +138,87 @@ namespace LVO{
         std::set<size_t> stereo_lines_left, stereo_lines_right;
 
 
-        for (auto mt : good_matchesLR) {
+//        std::cout << "keyline_l.size() = " << keyline_l.size() << std::endl;
+//        std::cout << "keyline_r.size() = " << keyline_r.size() << std::endl;
+//        std::cout << "all_obersves.size() = " << all_obersves.size() << std::endl;
+        for (auto mt : good_matchesLR)
+        {
+
+
             left_match_lines.push_back( keyline_l[mt.queryIdx] );
             right_match_lines.push_back( keyline_r[mt.trainIdx] );
-            {
-                Eigen::Vector2d leftstartPoint(keyline_l[mt.queryIdx].startPointX, keyline_l[mt.queryIdx].startPointY);
-                Eigen::Vector2d leftendPoint(keyline_l[mt.queryIdx].endPointX, keyline_l[mt.queryIdx].endPointY);
-                left_match_obs.push_back( left->get_monoparam()->Getobserve4d(leftstartPoint, leftendPoint) );
 
-                Eigen::Vector2d rightstartPoint(keyline_r[mt.trainIdx].startPointX, keyline_r[mt.trainIdx].startPointY);
-                Eigen::Vector2d rightendPoint(keyline_r[mt.trainIdx].endPointX, keyline_r[mt.trainIdx].endPointY);
-                right_match_obs.push_back( right->get_monoparam()->Getobserve4d(rightstartPoint, rightendPoint) );
-            }
+            Eigen::Vector2d leftstartPoint(keyline_l[mt.queryIdx].startPointX, keyline_l[mt.queryIdx].startPointY);
+            Eigen::Vector2d leftendPoint(keyline_l[mt.queryIdx].endPointX, keyline_l[mt.queryIdx].endPointY);
+            Eigen::Vector4d left_obs =  left->get_monoparam()->Getobserve4d(leftstartPoint, leftendPoint);
+
+            Eigen::Vector2d rightstartPoint(keyline_r[mt.trainIdx].startPointX, keyline_r[mt.trainIdx].startPointY);
+            Eigen::Vector2d rightendPoint(keyline_r[mt.trainIdx].endPointX, keyline_r[mt.trainIdx].endPointY);
+            Eigen::Vector4d right_obs =  right->get_monoparam()->Getobserve4d(rightstartPoint, rightendPoint);
+
+            LineFeature lineFeature;
+            lineFeature.insert_ob( get_StereoId(), left_obs, right_obs );
 
             stereo_lines_left.insert(mt.queryIdx);
             stereo_lines_right.insert(mt.trainIdx);
+
+            cv::Mat lbd_descr;
+
             // TODO 描述子取平均
             lbd_descr.push_back( lbd_l.row( mt.queryIdx ) );
+            lineFeature.set_descri(lbd_descr);
+
+            all_obersves.push_back(lineFeature);
+
+//            all_line_obs.push_back( left->get_monoparam()->Getobserve4d(leftstartPoint, leftendPoint) );
+//            all_line_obs.push_back( right->get_monoparam()->Getobserve4d(rightstartPoint, rightendPoint) );
+//            all_line_id.push_back( feature_id - 1 );
+//            all_line_id.push_back( feature_id - 1 );
+//            all_line_desc.push_back( lbd_l.row( mt.queryIdx ) );
+//            all_line_desc.push_back( lbd_l.row( mt.queryIdx ) );
         }
 
         for(int index=0;index<keyline_l.size();++index)
         {
             if(stereo_lines_left.count(index) > 0) continue;
-            left_un_match_lines.push_back(keyline_l[index]);
-            lbd_left_descr_remains.push_back( lbd_l.row(index) );
             {
                 Eigen::Vector2d leftstartPoint(keyline_l[index].startPointX, keyline_l[index].startPointY);
                 Eigen::Vector2d leftendPoint(keyline_l[index].endPointX, keyline_l[index].endPointY);
-                left_un_match_obs.push_back( left->get_monoparam()->Getobserve4d(leftstartPoint, leftendPoint) );
+                Eigen::Vector4d left_obs =  left->get_monoparam()->Getobserve4d(leftstartPoint, leftendPoint);
+
+                LineFeature lineFeature;
+                lineFeature.insert_ob( get_StereoId()*2, left_obs );
+
+                cv::Mat lbd_descr;
+
+                lbd_descr.push_back( lbd_l.row( index ) );
+                lineFeature.set_descri(lbd_descr);
+
+                all_obersves.push_back(lineFeature);
             }
         }
 
         for(int index=0;index<keyline_r.size();++index)
         {
             if(stereo_lines_right.count(index) > 0) continue;
-            right_un_match_lines.push_back(keyline_r[index]);
-            lbd_right_descr_remains.push_back( lbd_r.row(index) );
             {
                 Eigen::Vector2d rightstartPoint(keyline_r[index].startPointX, keyline_r[index].startPointY);
                 Eigen::Vector2d rightendPoint(keyline_r[index].endPointX, keyline_r[index].endPointY);
-                right_un_match_obs.push_back( right->get_monoparam()->Getobserve4d(rightstartPoint, rightendPoint) );
+                Eigen::Vector4d right_obs =  right->get_monoparam()->Getobserve4d(rightstartPoint, rightendPoint);
+
+                LineFeature lineFeature;
+                lineFeature.insert_ob( get_StereoId()*2+1, right_obs );
+
+                cv::Mat lbd_descr;
+
+                lbd_descr.push_back( lbd_r.row( index ) );
+                lineFeature.set_descri(lbd_descr);
+
+                all_obersves.push_back(lineFeature);
             }
         }
+
+//        std::cout << "all_obersves.size() = " << all_obersves.size() << std::endl;
 
     }
 

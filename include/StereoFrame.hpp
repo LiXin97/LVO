@@ -9,6 +9,7 @@
 #include "Param.hpp"
 #include <opencv2/line_descriptor.hpp>
 #include <opencv2/features2d.hpp>
+#include "Feature.hpp"
 
 namespace LVO
 {
@@ -32,12 +33,14 @@ namespace LVO
 
         std::shared_ptr< MonoParam > get_monoparam(){return mono_param;}
 
-        void setTwc(const Eigen::Matrix4d& Twc_input){ Twc = Twc_input; }
+        void set_Twc(const Eigen::Matrix4d& Twc_input){ Twc = Twc_input; }
 
-        Eigen::Matrix4d getTwc(){return Twc;}
+        Eigen::Matrix4d get_Twc(){return Twc;}
 
         std::vector<cv::line_descriptor::KeyLine> get_line_extract(){return keyline;}
         cv::Mat get_lbd(){return keylbd_descr.clone();};
+
+        long get_id(){return frame_id;}
 
     private:
         long frame_id;
@@ -78,19 +81,22 @@ namespace LVO
 
         long get_StereoId(){return StereoFrameId;}
 
-        std::tuple< std::vector<cv::line_descriptor::KeyLine>, std::vector<cv::line_descriptor::KeyLine>, cv::Mat > get_stereo_match_line()
+        void set_Twc(const Eigen::Matrix4d& Twc_input)
         {
-            return std::make_tuple( left_match_lines, right_match_lines, lbd_descr );
+            left->set_Twc(Twc_input);
+            Eigen::Matrix4d Trl = stereo_param->Tlr;
+            right->set_Twc( Twc_input*Trl );
         }
 
-        std::tuple< std::vector<cv::line_descriptor::KeyLine>, std::vector<cv::line_descriptor::KeyLine>, cv::Mat, cv::Mat > get_remains_lines()
-        {
-            return std::make_tuple( left_un_match_lines, right_un_match_lines, lbd_left_descr_remains, lbd_right_descr_remains );
-        }
+        std::tuple< Eigen::Matrix4d, Eigen::Matrix4d > get_Twc(){return std::make_tuple( left->get_Twc(), right->get_Twc() );}
 
-        std::tuple< std::vector<Eigen::Vector4d>, std::vector<Eigen::Vector4d>, cv::Mat > get_stereo_match_line_obs()
+        std::vector< LineFeature > get_obs(){return all_obersves;}
+
+        void set_lineid( std::vector< long >& line_id ){ all_line_id = line_id; }
+        
+        std::tuple< std::vector< long >, std::vector< LineFeature > > get_id_obs()
         {
-            return std::make_tuple( left_match_obs, right_match_obs, lbd_descr );
+            return std::make_tuple( all_line_id, all_obersves );
         }
 
     private:
@@ -102,15 +108,10 @@ namespace LVO
 
         std::shared_ptr< StereoMatchParam > stereo_param;
 
+        std::vector< long > all_line_id;
+        std::vector< LineFeature > all_obersves;
+
         std::vector<cv::line_descriptor::KeyLine> left_match_lines, right_match_lines;
-
-        std::vector<cv::line_descriptor::KeyLine> left_un_match_lines, right_un_match_lines;
-
-        std::vector<Eigen::Vector4d> left_match_obs, right_match_obs;
-
-        std::vector<Eigen::Vector4d> left_un_match_obs, right_un_match_obs;
-
-        cv::Mat lbd_descr, lbd_left_descr_remains, lbd_right_descr_remains;
 
         Eigen::Matrix4d Trl;
     };
