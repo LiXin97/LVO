@@ -90,6 +90,8 @@ namespace LVO
 
         std::tuple< Eigen::Matrix4d, Eigen::Matrix4d > get_Twc(){return std::make_tuple( left->get_Twc(), right->get_Twc() );}
 
+        std::tuple< Eigen::Matrix4d, Eigen::Matrix4d > get_Twc_ex(){return std::make_tuple( left->get_Twc(), stereo_param->Tlr );}
+
         std::vector< LineFeature > get_obs(){return all_obersves;}
 
         void set_lineid( std::vector< long >& line_id ){ all_line_id = line_id; }

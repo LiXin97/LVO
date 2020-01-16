@@ -111,6 +111,7 @@ namespace LVO
         cv::Mat last_frame_desc;
         std::vector<Eigen::Vector4d> last_lines_pixel;
         std::vector< long > last_frame_id;
+        std::vector< long > feature_ids;
         std::set<long> candite_id;
         {
             std::vector<long> stereo_id;
@@ -125,6 +126,7 @@ namespace LVO
                     cv::Mat des = obs[i].get_descri();
                     last_frame_desc.push_back( des.row(0) );
                     candite_id.insert( stereo_id[i] );
+                    feature_ids.push_back( it->first );
 
                     if(TRACK_DEBUG)
                     {
@@ -163,6 +165,21 @@ namespace LVO
         auto match_result = matchNNR(last_frame_desc, cur_des);
 
 
+        auto match_result2 = matchNNR(cur_des, last_frame_desc);
+
+        std::cout << "match_result.size() = " << match_result.size() << std::endl;
+        std::cout << "match_result2.size() = " << match_result2.size() << std::endl;
+
+        std::map<int, int> match_opti;
+        for(auto &ma:match_result)
+        {
+            match_opti.emplace( ma.second, feature_ids[ma.first] );
+        }
+        Eigen::Matrix4d cur_pos, Tlr;
+        std::tie( cur_pos, Tlr ) = cur_frame->get_Twc_ex();
+        optimization_curpose( cur_pos, Tlr, match_opti );
+
+
         if(TRACK_DEBUG)
         {
             std::cout << "match_result.size() = " << match_result.size() << std::endl;
@@ -170,6 +187,124 @@ namespace LVO
         }
 
         return match_result.size() > 8;
+    }
+
+    void Odometry::optimization_curpose( Eigen::Matrix4d& Twc, Eigen::Matrix4d& Tlr, std::map<int, int>& match )
+    {
+        lineProjectionFactor::sqrt_info  = 240 / 1.5 * Eigen::Matrix2d::Identity();
+        ceres::Problem problem;
+
+        std::vector<long> frameids;
+        std::vector<Eigen::Vector4d> obs;
+        std::vector<Eigen::Vector4d> orths;
+        std::vector< int > obs_line; // 观测是哪条线的
+
+        std::vector<long> stereo_id;
+        std::vector< LineFeature > line_obs;
+        std::tie(stereo_id, line_obs) = cur_frame->get_id_obs();
+        for(auto &ma:match)
+        {
+            auto obs_single_line = line_obs[ma.first].get_obs();
+            for(auto &ob:obs_single_line)
+            {
+                frameids.push_back(ob.first);
+                obs.push_back(ob.second.get4dob());
+                obs_line.push_back(orths.size());
+            }
+            Eigen::Vector4d orth = SW_features[ma.second].get_orth_w( SW_frames );
+            orths.push_back(orth);
+        }
+
+        double para_Feature_line[orths.size()][4];
+        for(int index = 0; index<orths.size(); ++index)
+        {
+            Eigen::Vector4d orth = orths[index];
+
+            para_Feature_line[index][0] = orth[0];
+            para_Feature_line[index][1] = orth[1];
+            para_Feature_line[index][2] = orth[2];
+            para_Feature_line[index][3] = orth[3];
+
+            ceres::LocalParameterization *local_parameterization = new LineOrthParameterization();
+            problem.AddParameterBlock(para_Feature_line[index], 4, local_parameterization);
+            problem.SetParameterBlockConstant(para_Feature_line[index]);
+        }
+
+        double para_Pose[2][7];
+        {
+            Eigen::Matrix3d Rot = Twc.block(0,0,3,3);
+            Eigen::Vector3d Tran = Twc.block(0,3,3,1);
+            Eigen::Quaterniond qua(Rot);
+
+            para_Pose[0][0] = Tran(0);
+            para_Pose[0][1] = Tran(1);
+            para_Pose[0][2] = Tran(2);
+            para_Pose[0][3] = qua.x();
+            para_Pose[0][4] = qua.y();
+            para_Pose[0][5] = qua.z();
+            para_Pose[0][6] = qua.w();
+
+            ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
+            problem.AddParameterBlock(para_Pose[0], 7, local_parameterization);
+        }
+        {
+            Eigen::Matrix3d Rot = Tlr.block(0,0,3,3);
+            Eigen::Vector3d Tran = Tlr.block(0,3,3,1);
+            Eigen::Quaterniond qua(Rot);
+
+            para_Pose[1][0] = Tran(0);
+            para_Pose[1][1] = Tran(1);
+            para_Pose[1][2] = Tran(2);
+            para_Pose[1][3] = qua.x();
+            para_Pose[1][4] = qua.y();
+            para_Pose[1][5] = qua.z();
+            para_Pose[1][6] = qua.w();
+
+            ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
+            problem.AddParameterBlock(para_Pose[1], 7, local_parameterization);
+            problem.SetParameterBlockConstant( para_Pose[1] );
+        }
+
+
+        for(int index = 0; index < obs.size(); ++index)
+        {
+            auto observe = obs[index];
+            auto index_feature = obs_line[index];
+            if( frameids[index]%2 == 0 )
+            {
+                ceres::LossFunction* loss_function = nullptr;
+                loss_function = new ceres::CauchyLoss(1.);
+
+                lineProjectionFactor* cost_function = new lineProjectionFactor( observe );
+                problem.AddResidualBlock(cost_function, loss_function, para_Pose[0], para_Feature_line[index_feature]);
+
+            }
+        }
+
+
+        ceres::Solver::Options options;
+        options.linear_solver_type = ceres::DENSE_SCHUR;
+        options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;  // LEVENBERG_MARQUARDT  DOGLEG
+//    options.linear_solver_type = ceres::SPARSE_SCHUR; // SPARSE_NORMAL_CHOLESKY  or SPARSE_SCHUR
+        options.max_num_iterations = 10;
+        options.minimizer_progress_to_stdout = true;
+
+        TicToc solver_time;
+        ceres::Solver::Summary summary;
+        ceres::Solve (options, &problem, & summary);
+
+        std::cout << summary.FullReport()<<std::endl;
+
+        std::cout << "before opti " << std::endl << Twc << std::endl;
+
+        {
+            Eigen::Quaterniond qua(para_Pose[0][6], para_Pose[0][3], para_Pose[0][4], para_Pose[0][5]);
+            Eigen::Matrix3d rot = qua.toRotationMatrix();
+            Eigen::Vector3d tran(para_Pose[0][0], para_Pose[0][1], para_Pose[0][2]);
+            Twc.block(0,3,3,1) = tran;
+            Twc.block(0,0,3,3) = rot;
+        }
+        std::cout << "after opti " << std::endl << Twc << std::endl;
     }
 
     void Odometry::show_match(

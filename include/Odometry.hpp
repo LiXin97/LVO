@@ -9,8 +9,12 @@
 #include "Feature.hpp"
 #include "StereoFrame.hpp"
 
-namespace LVO{
+#include "optimi/line_projection_factor.hpp"
+#include "optimi/line_parameterization.hpp"
+#include "optimi/pose_local_parameterization.hpp"
 
+namespace LVO
+{
     class Odometry{
     public:
         Odometry()= default;
@@ -30,7 +34,7 @@ namespace LVO{
         bool track_sw();
 
         void optimization_SW();
-        void optimization_CurPose();
+        void optimization_curpose( Eigen::Matrix4d& Twc, Eigen::Matrix4d& Tlr, std::map<int, int>& match );
 
         void update_velocity();
 
@@ -110,6 +114,8 @@ namespace LVO{
         }
 
         void input_frame(std::shared_ptr<StereoFrame>& stereoframe);
+
+        OdoState get_state(){return state;}
 
     private:
         // 滑窗存的是单目的frame

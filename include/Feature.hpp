@@ -157,6 +157,35 @@ namespace LVO{
 
         std::map<long, LineFeatureOb> get_obs(){return obs;}
 
+        Eigen::Vector4d get_orth_w( const std::map<long, Eigen::Matrix4d>& frame_map )
+        {
+            auto iter = frame_map.find(obs.begin()->first);
+            Eigen::Matrix4d Twc = iter->second;
+
+            Eigen::Vector3d twc = Twc.block(0, 3, 3, 1);
+            Eigen::Matrix3d Rwc = Twc.block(0, 0, 3, 3);
+
+            Eigen::Matrix<double, 6, 1> plk_w = plk_translation( plucker_cam, Rwc, twc );
+
+            Eigen::Vector4d orth = plk_to_orth(plk_w);
+            return orth;
+        }
+
+
+        Eigen::Matrix<double, 6, 1> plk_translation( const Eigen::Matrix<double, 6, 1>& plk, const Eigen::Matrix3d& R, const Eigen::Vector3d& t )
+        {
+            Eigen::Vector3d n_src = plk.head(3);
+            Eigen::Vector3d v_src = plk.tail(3);
+
+            Eigen::Vector3d n_new = R * n_src + skew_symmetric(t) * R * v_src;
+            Eigen::Vector3d v_new = R * v_src;
+
+            Eigen::Matrix<double, 6, 1> plk_new;
+            plk_new.head(3) = n_new;
+            plk_new.tail(3) = v_new;
+            return plk_new;
+        }
+
         // TODO 自动描述子求平均
         void set_descri(cv::Mat& des){ descri = des.clone(); }
 

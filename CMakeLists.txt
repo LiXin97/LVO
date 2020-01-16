@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(LVO)
 
 set(CMAKE_CXX_STANDARD 17)
-SET(CMAKE_BUILD_TYPE Release)
+#SET(CMAKE_BUILD_TYPE Release)
 
 find_package(Pangolin REQUIRED)
 find_package(OpenCV REQUIRED)

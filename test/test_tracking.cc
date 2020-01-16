@@ -12,10 +12,13 @@
 //std::string PathToSequence = "/home/lixin04/data/photo/MH_05";
 std::string PathToSequence = "/home/lixin04/data/photo/V1_02_medium/mav0";
 const std::string ParameterFile = "../config/EuRoc_VR.yaml";
+const std::string GroundTrueFile = "/home/lixin04/output/V102_TUM.txt";
 
 void LoadStereoCalib( const std::string& ParameterFile, cv::Mat& M1l,cv::Mat& M1r,cv::Mat&M2l,cv::Mat& M2r );
 void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &vstrImageLeft,
                 std::vector<std::string> &vstrImageRight, std::vector<double> &vTimestamps);
+
+void LoadTrueTraj( const std::string &GroundtruthFile, std::vector< Eigen::Matrix4d >& Twcs, std::vector<double> &vTimestamps );
 
 void print_T01()
 {
@@ -61,10 +64,18 @@ int main(int argc, char **argv)
     std::vector<std::string> vstrImageLeft;
     std::vector<std::string> vstrImageRight;
     std::vector<double> vTimestamps;
+    std::vector< Eigen::Matrix4d > Twcs_true;
+
     LoadImages(PathToSequence, vstrImageLeft, vstrImageRight, vTimestamps);
 
     cv::Mat M1l,M2l,M1r,M2r;
     LoadStereoCalib(ParameterFile, M1l ,M1r ,M2l ,M2r);
+
+    LoadTrueTraj( GroundTrueFile, Twcs_true, vTimestamps );
+
+    std::cout << "Twcs_true.size() = " << Twcs_true.size() << std::endl;
+    std::cout << "vstrImageLeft.size() = " << vstrImageLeft.size() << std::endl;
+    std::cout << "vTimestamps.size() = " << vTimestamps.size() << std::endl;
 
 
     const int nImages = static_cast<const int>(vstrImageLeft.size());
@@ -78,6 +89,9 @@ int main(int argc, char **argv)
 
     std::vector<cv::Mat> T_all;
     std::vector<long> Time_all;
+
+    Eigen::Matrix4d init = Eigen::Matrix4d::Identity();
+    bool get_init = true;
     // Main loop
     for(int ni=begin ; ni<end; ni++)
     {
@@ -105,11 +119,91 @@ int main(int argc, char **argv)
         std::shared_ptr< LVO::StereoFrame > stereoframe = std::make_shared< LVO::StereoFrame >(ni, tframe, imLeftRect, paraml, imRightRect, paramr, stereoparam);
         odo.input_frame(stereoframe);
 
+        if( odo.get_state() == LVO::Odometry::OK && get_init )
+        {
+            init = Twcs_true[ni];
+            get_init = false;
+        }
+
+        std::cout << "GT Twc = " << std::endl << Twcs_true[ni].inverse() * init  << std::endl;
+
         if(cv::waitKey( 1 ) == 27) break;
 
     }
 
     return 0;
+}
+
+
+void LoadTrueTraj( const std::string &GroundtruthFile, std::vector< Eigen::Matrix4d >& Twcs, std::vector<double> &vTimestamps )
+{
+    std::ifstream fTruth(GroundtruthFile.c_str());
+    if (!fTruth)
+    {
+        std::cout << "can not open GroudtruthFile" << std::endl;
+        return ;
+    }
+    while (!fTruth.eof())
+    {
+        for(int index = 0; index < vTimestamps.size(); ++index)
+        {
+//            std::cout << std::setprecision(20) << "vTimestamps[index] = " << vTimestamps[index] << std::endl;
+
+            std::vector<double> data_need(8);
+            {
+                double data[8];
+                for (auto &d:data)
+                {
+                    fTruth >> d;
+                }
+                for(int i=0;i<7;++i) data_need[i] = data[i];
+
+                double error = data_need[0] - vTimestamps[index];
+                while( error > 0.01 )
+                {
+                    ++index;
+                    error = data_need[0] - vTimestamps[index];
+                    Eigen::Matrix4d Twc = Eigen::Matrix4d::Identity();
+                    Twcs.push_back(Twc);
+                }
+
+//                std::cout << std::setprecision(20) << "data[0] = " << data_need[0] << std::endl;
+//                std::cout << std::setprecision(20) << "std::abs(data_need[0] - vTimestamps[index])  = " << std::abs(data_need[0] - vTimestamps[index])  << std::endl;
+            }
+
+            do{
+                if(fTruth.eof()) return;
+//                data.clear();
+                double data[8];
+                for (auto &d:data)
+                {
+                    fTruth >> d;
+                }
+                for(int i=0;i<7;++i) data_need[i] = data[i];
+//                std::cout << std::setprecision(20) << "data[0] = " << data_need[0] << std::endl;
+//                std::cout << std::setprecision(20) << "std::abs(data_need[0] - vTimestamps[index])  = " << data_need[0] - vTimestamps[index]  << std::endl;
+            }
+            while( std::abs(data_need[0] - vTimestamps[index]) > 0.01 );
+
+
+            std::vector<double> t;
+            std::vector<double> R;
+
+            t.push_back(data_need[1]);
+            t.push_back(data_need[2]);
+            t.push_back(data_need[3]);
+
+            Eigen::Quaterniond qua( data_need[7], data_need[3], data_need[4], data_need[5] );
+
+            Eigen::Matrix4d Twc = Eigen::Matrix4d::Identity();
+            Twc.block(0,0,3,3) = qua.toRotationMatrix();
+            Twc(0,3) = t[0];
+            Twc(1,3) = t[1];
+            Twc(2,3) = t[2];
+
+            Twcs.push_back(Twc);
+        }
+    }
 }
 
 Eigen::Matrix<double,3,3> toMatrix3d(const cv::Mat &cvMat3)
@@ -168,6 +262,7 @@ void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &
             vstrImageRight.push_back( strPrefixRight + ss.str() +".png");
             double t;
             ss >> t;
+            t /= 1e9;
             vTimestamps.push_back(t);
         }
     }

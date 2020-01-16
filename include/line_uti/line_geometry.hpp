@@ -2,8 +2,9 @@
 // Created by hyj on 17-12-8.
 //
 
-#ifndef VINS_ESTIMATOR_LINE_GEOMETRY_H
-#define VINS_ESTIMATOR_LINE_GEOMETRY_H
+#pragma once
+
+
 #include <eigen3/Eigen/Dense>
 #include <iostream>
 using namespace Eigen;
@@ -38,4 +39,3 @@ Vector6d line_from_pose(Vector6d line_c, Eigen::Matrix3d Rcw, Eigen::Vector3d tc
 Vector6d plk_to_pose( Vector6d plk_w, const Eigen::Matrix3d& Rcw, Eigen::Vector3d tcw );
 Vector6d plk_from_pose( Vector6d plk_c, Eigen::Matrix3d Rcw, const Eigen::Vector3d& tcw );
 
-#endif //VINS_ESTIMATOR_LINE_GEOMETRY_H
