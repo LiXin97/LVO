@@ -94,6 +94,8 @@ namespace LVO{
 
         float match_dist_thread = 30;
 
+        int SW_frame_size = 10;
+
 //    private:
 
     };

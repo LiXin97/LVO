@@ -34,9 +34,13 @@ namespace LVO
         bool track_sw();
 
         void optimization_SW();
-        void optimization_curpose( Eigen::Matrix4d& Twc, Eigen::Matrix4d& Tlr, std::map<int, int>& match );
+        void optimization_curpose( Eigen::Matrix4d& Twc, const Eigen::Matrix4d& Tlr, const std::map<int, int>& match );
 
         void update_velocity();
+
+        bool need_keyframe();
+
+        void add_keyframe();
 
         std::map< int, int > matchNNR(const cv::Mat &desc1, const cv::Mat &desc2, float nnr = 0.75);
 
@@ -116,6 +120,8 @@ namespace LVO
         void input_frame(std::shared_ptr<StereoFrame>& stereoframe);
 
         OdoState get_state(){return state;}
+
+        void update_cur_frame_feature_id( const std::map<int, int>& match_opti );
 
     private:
         // 滑窗存的是单目的frame

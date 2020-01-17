@@ -75,24 +75,110 @@ namespace LVO
         {
             bool OK;
             OK = track_motion_mode();
-//            if(!OK)
-//            {
-//
-//            }
-//
-//            OK = track_sw();
-//            if(!OK)
-//            {
-//
-//            }
-//
-//            if(OK)
-//            {
-//                update_velocity();
+            if(!OK)
+            {
+                std::cerr << "track_motion_mode() failed" << std::endl;
+            }
+
+            OK = track_sw();
+            if(!OK)
+            {
+                std::cerr << "track_sw() failed" << std::endl;
+            }
+
+            if(OK)
+            {
+                update_velocity();
+
+                {
+                    SW_frames.emplace(cur_frame->get_left_frame()->get_id(), cur_frame->get_left_frame()->get_Twc());
+                    SW_frames.emplace(cur_frame->get_right_frame()->get_id(), cur_frame->get_right_frame()->get_Twc());
+
+                    // 添加当前帧的观测到滑窗
+                    {
+                        std::vector<long> feature_ids;
+                        std::vector< LineFeature > obs;
+                        std::tie( feature_ids, obs ) = cur_frame->get_id_obs();
+
+                        for(int index = 0;index<feature_ids.size();++index)
+                        {
+                            if(feature_ids[index] < 0)
+                            {
+                                continue;
+                            }
+
+                            auto &ob = obs[index];
+                            auto observe = ob.get_obs();
+                            for(auto &obse:observe)
+                                SW_features[ feature_ids[index] ].insert_ob(obse.first, obse.second);
+                        }
+                    }
+
+
+                    // 三角化
+
+                    {
+                        for(auto &id_feature:SW_features)
+                        {
+                            auto &feature = id_feature.second;
+                            if(feature.is_tri()) continue;
+                            feature.tri_two_plane( SW_frames );
+                        }
+                    }
+
+                    bool need_kf = need_keyframe();
+
+                    // 滑窗优化
+
+                    // 滑窗
+                    {
+                        if(need_kf) add_keyframe();
+
+                        std::cout << "SW_frames.size() = " << SW_frames.size() << std::endl;
+                    }
+                }
+
 //                if(need_keyframe()) add_keyframe();
-//                last_frame = cur_frame;
-//            }
+                last_frame = cur_frame;
+            }
         }
+    }
+
+    //TODO 关键帧判断
+    bool Odometry::need_keyframe()
+    {
+        if( SW_frames.size() < ( odoParam.SW_frame_size * 2 ) ) return true;
+
+        auto last_keyframe_id = last_key_frame->get_StereoId();
+        auto cur_frame_id = cur_frame->get_StereoId();
+
+        Eigen::Vector3d last_keyframe_t = std::get<0>(last_key_frame->get_Twc_ex()).block(0,3,3,1);
+        Eigen::Vector3d cur_frame_t = std::get<0>(cur_frame->get_Twc_ex()).block(0,3,3,1);
+        double distance = (last_keyframe_t - cur_frame_t).norm();
+
+        return distance > 0.1;
+    }
+
+    void Odometry::add_keyframe()
+    {
+        // 将关键帧新的观测加入到SW_featuer中
+        std::vector<long> feature_ids;
+        std::vector< LineFeature > obs;
+        std::tie( feature_ids, obs ) = cur_frame->get_id_obs();
+
+        for(int index = 0;index<feature_ids.size();++index)
+        {
+            if(feature_ids[index] < 0)
+            {
+                feature_ids[index] = feature_id;
+                SW_features.emplace(feature_id++, obs[index]);
+            }
+        }
+
+        cur_frame->set_lineid(feature_ids);
+
+
+        last_key_frame = cur_frame;
     }
 
     void Odometry::update_velocity()
@@ -103,10 +189,10 @@ namespace LVO
         motion_velocity = Twcl.inverse()*Twcc;
     }
 
-#define TRACK_DEBUG 0
+#define TRACK_MOTION_DEBUG 0
     bool Odometry::track_motion_mode()
     {
-        cur_frame->set_Twc( last_frame->get_left_frame()->get_Twc()*motion_velocity );
+        cur_frame->update_Twc( last_frame->get_left_frame()->get_Twc()*motion_velocity );
 
         cv::Mat last_frame_desc;
         std::vector<Eigen::Vector4d> last_lines_pixel;
@@ -114,21 +200,24 @@ namespace LVO
         std::vector< long > feature_ids;
         std::set<long> candite_id;
         {
-            std::vector<long> stereo_id;
+            std::vector<long> line_id;
             std::vector< LineFeature > obs;
-            std::tie(stereo_id, obs) = last_frame->get_id_obs();
+            std::tie(line_id, obs) = last_frame->get_id_obs();
 
-            for( int i=0;i<stereo_id.size(); ++i )
+            for( int i=0;i<line_id.size(); ++i )
             {
-                auto it = SW_features.find(stereo_id[i]);
+                if(line_id[i] < 0) continue;
+                if(SW_features.count(line_id[i]) == 0) continue;
+
+                auto it = SW_features.find(line_id[i]);
                 if(it->second.is_tri())
                 {
                     cv::Mat des = obs[i].get_descri();
                     last_frame_desc.push_back( des.row(0) );
-                    candite_id.insert( stereo_id[i] );
+                    candite_id.insert( line_id[i] );
                     feature_ids.push_back( it->first );
 
-                    if(TRACK_DEBUG)
+                    if(TRACK_MOTION_DEBUG)
                     {
                         last_frame_id.push_back( obs[i].get_obs().begin()->first );
                         Eigen::Vector4d ob_norm = obs[i].get_obs().begin()->second.get4dob();
@@ -152,7 +241,7 @@ namespace LVO
                 cv::Mat des = obs[i].get_descri();
                 cur_des.push_back( des.row(0) );
 
-                if(TRACK_DEBUG)
+                if(TRACK_MOTION_DEBUG)
                 {
                     cur_frame_id.push_back( obs[i].get_obs().begin()->first );
                     Eigen::Vector4d ob_norm = obs[i].get_obs().begin()->second.get4dob();
@@ -162,25 +251,25 @@ namespace LVO
             }
         }
 
-        auto match_result = matchNNR(last_frame_desc, cur_des);
+//        auto match_result = matchNNR(last_frame_desc, cur_des);
 
 
-        auto match_result2 = matchNNR(cur_des, last_frame_desc);
+        auto match_result = matchNNR(cur_des, last_frame_desc);
 
-        std::cout << "match_result.size() = " << match_result.size() << std::endl;
-        std::cout << "match_result2.size() = " << match_result2.size() << std::endl;
+//        std::cout << "motion match_result.size() = " << match_result.size() << std::endl;
+//        std::cout << "match_result2.size() = " << match_result2.size() << std::endl;
 
         std::map<int, int> match_opti;
         for(auto &ma:match_result)
         {
-            match_opti.emplace( ma.second, feature_ids[ma.first] );
+            match_opti.emplace( ma.first, feature_ids[ma.second] );
         }
         Eigen::Matrix4d cur_pos, Tlr;
         std::tie( cur_pos, Tlr ) = cur_frame->get_Twc_ex();
         optimization_curpose( cur_pos, Tlr, match_opti );
+        cur_frame->update_Twc( cur_pos );
 
-
-        if(TRACK_DEBUG)
+        if(TRACK_MOTION_DEBUG)
         {
             std::cout << "match_result.size() = " << match_result.size() << std::endl;
             show_match( match_result, cur_lines_pixel, last_lines_pixel, cur_frame_id, last_frame_id );
@@ -189,7 +278,93 @@ namespace LVO
         return match_result.size() > 8;
     }
 
-    void Odometry::optimization_curpose( Eigen::Matrix4d& Twc, Eigen::Matrix4d& Tlr, std::map<int, int>& match )
+#define TRACK_SW_DEBUG 0
+    bool Odometry::track_sw()
+    {
+        cv::Mat sw_desc;
+        std::vector< long > sw_feature_ids;
+
+        for(auto& id_feature:SW_features)
+        {
+            auto& featureId = id_feature.first;
+            auto& feature = id_feature.second;
+            if(feature.is_tri())
+            {
+                cv::Mat des = feature.get_descri();
+                sw_desc.push_back( des.row(0) );
+                sw_feature_ids.push_back( featureId );
+            }
+        }
+
+        cv::Mat cur_des;
+        std::vector<Eigen::Vector4d> cur_lines_pixel;
+        std::vector< long > cur_frame_id;
+        {
+            std::vector<long> stereo_id;
+            std::vector< LineFeature > obs;
+            std::tie(stereo_id, obs) = cur_frame->get_id_obs();
+
+            for(auto & ob : obs)
+            {
+                cv::Mat des = ob.get_descri();
+                cur_des.push_back( des.row(0) );
+
+                if(TRACK_SW_DEBUG)
+                {
+                    cur_frame_id.push_back( ob.get_obs().begin()->first );
+                    Eigen::Vector4d ob_norm = ob.get_obs().begin()->second.get4dob();
+                    Eigen::Vector4d ob_pixel = cur_frame->get_left_frame()->get_monoparam()->GetPixel4d(ob_norm);
+                    cur_lines_pixel.push_back(ob_pixel);
+                }
+            }
+        }
+
+//        auto match_result = matchNNR(last_frame_desc, cur_des);
+
+
+        auto match_result = matchNNR(cur_des, sw_desc);
+
+
+//        std::cout << "sw match_result.size() = " << match_result.size() << std::endl;
+
+//        std::cout << "match_result.size() = " << match_result.size() << std::endl;
+//        std::cout << "match_result2.size() = " << match_result2.size() << std::endl;
+
+        std::map<int, int> match_opti;
+        for(auto &ma:match_result)
+        {
+            match_opti.emplace( ma.first, sw_feature_ids[ma.second] );
+        }
+        Eigen::Matrix4d cur_pos, Tlr;
+        std::tie( cur_pos, Tlr ) = cur_frame->get_Twc_ex();
+        optimization_curpose( cur_pos, Tlr, match_opti );
+        cur_frame->update_Twc( cur_pos );
+
+        update_cur_frame_feature_id( match_opti );
+
+        if(TRACK_SW_DEBUG)
+        {
+            std::cout << "match_result.size() = " << match_result.size() << std::endl;
+//            show_match( match_result, cur_lines_pixel, last_lines_pixel, cur_frame_id, last_frame_id );
+        }
+
+        return match_result.size() > 8;
+    }
+
+    void Odometry::update_cur_frame_feature_id( const std::map<int, int>& match_opti )
+    {
+        int obs_nums = cur_frame->get_obs_num();
+        std::vector< long > obs_feature_id(obs_nums, -1);
+
+        for(const auto &ma:match_opti)
+        {
+            obs_feature_id[ma.first] = ma.second;
+        }
+
+        cur_frame->set_lineid( obs_feature_id );
+    }
+
+    void Odometry::optimization_curpose( Eigen::Matrix4d& Twc, const Eigen::Matrix4d& Tlr, const std::map<int, int>& match )
     {
         lineProjectionFactor::sqrt_info  = 240 / 1.5 * Eigen::Matrix2d::Identity();
         ceres::Problem problem;
@@ -275,9 +450,17 @@ namespace LVO
                 ceres::LossFunction* loss_function = nullptr;
                 loss_function = new ceres::CauchyLoss(1.);
 
-                lineProjectionFactor* cost_function = new lineProjectionFactor( observe );
+                auto cost_function = new lineProjectionFactor( observe );
                 problem.AddResidualBlock(cost_function, loss_function, para_Pose[0], para_Feature_line[index_feature]);
 
+            }
+            else
+            {
+                ceres::LossFunction* loss_function = nullptr;
+                loss_function = new ceres::CauchyLoss(1.);
+
+                auto cost_function = new lineProjectionRightFactor( observe );
+                problem.AddResidualBlock(cost_function, loss_function, para_Pose[0], para_Pose[1], para_Feature_line[index_feature]);
             }
         }
 
@@ -287,13 +470,13 @@ namespace LVO
         options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;  // LEVENBERG_MARQUARDT  DOGLEG
 //    options.linear_solver_type = ceres::SPARSE_SCHUR; // SPARSE_NORMAL_CHOLESKY  or SPARSE_SCHUR
         options.max_num_iterations = 10;
-        options.minimizer_progress_to_stdout = true;
+        options.minimizer_progress_to_stdout = false;
 
         TicToc solver_time;
         ceres::Solver::Summary summary;
         ceres::Solve (options, &problem, & summary);
 
-        std::cout << summary.FullReport()<<std::endl;
+//        std::cout << summary.FullReport()<<std::endl;
 
         std::cout << "before opti " << std::endl << Twc << std::endl;
 

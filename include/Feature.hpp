@@ -197,7 +197,7 @@ namespace LVO{
         std::map<long, LineFeatureOb> obs;  // < frame_id, observe >
         cv::Mat descri;
 
-        double mini_tri_angle = 1.5;
+        double mini_tri_angle = 1.;
 
         // TODO 生命周期过长的特征直接删除？
         int age = 1;

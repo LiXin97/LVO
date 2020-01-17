@@ -66,9 +66,18 @@ class lineProjectionFactor : public ceres::SizedCostFunction<2, 7, 4>
     void check(double **parameters);
 
     Eigen::Vector4d obs_i;
-    Eigen::Matrix<double, 2, 3> tangent_base;
     static Eigen::Matrix2d sqrt_info;
-    static double sum_t;
+};
+
+class lineProjectionRightFactor : public ceres::SizedCostFunction<2, 7, 7, 4>
+{
+public:
+    lineProjectionRightFactor(const Eigen::Vector4d &_pts_i);
+    virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const;
+    void check(double **parameters);
+
+    Eigen::Vector4d obs_i;
+    static Eigen::Matrix2d sqrt_info;
 };
 
 class lineQuaProjectionFactor : public ceres::SizedCostFunction<2, 7, 5>

@@ -19,7 +19,6 @@ static Eigen::Quaternion<typename Derived::Scalar> deltaQ(const Eigen::MatrixBas
     return dq;
 }
 Eigen::Matrix2d lineProjectionFactor::sqrt_info;
-double lineProjectionFactor::sum_t;
 
 lineProjectionFactor::lineProjectionFactor(const Eigen::Vector4d &_obs_i) : obs_i(_obs_i)
 {
@@ -120,6 +119,212 @@ bool lineProjectionFactor::Evaluate(double const *const *parameters, double *res
             jacobian_lineOrth = jaco_e_Lc * invTwc * jaco_Lw_orth;
         }
 
+    }
+
+    if (jacobians && jacobians[0] && jacobians[1] && 0)
+    {
+        // check jacobian
+        std::cout << "ana = " << std::endl;
+        std::cout << Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor>>(jacobians[0]) << std::endl
+                  << std::endl;
+        std::cout << Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor>>(jacobians[1]) << std::endl
+                  << std::endl;
+        const double eps = 1e-6;
+        Eigen::Matrix<double, 2, 10> num_jacobian;
+        for (int k = 0; k < 10; k++)
+        {
+            Eigen::Vector3d Pi_ck(parameters[0][0], parameters[0][1], parameters[0][2]);
+            Eigen::Quaterniond Qi_ck(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
+
+            Eigen::Vector4d line_orth_ck( parameters[1][0],parameters[1][1],parameters[1][2],parameters[1][3]);
+            ceres::LocalParameterization *local_parameterization_line = new LineOrthParameterization();
+
+            int a = k / 3, b = k % 3;
+            Eigen::Vector3d delta = Eigen::Vector3d(b == 0, b == 1, b == 2) * eps;
+
+            if (a == 0)
+                Pi_ck += delta;
+            else if (a == 1)
+                Qi_ck = Qi_ck * deltaQ(delta);
+            else if (a == 2) {           // line orth的前三个元素
+                Eigen::Vector4d line_new;
+                Eigen::Vector4d delta_l;
+                delta_l<< delta, 0.0;
+                local_parameterization_line->Plus(line_orth_ck.data(),delta_l.data(),line_new.data());
+                line_orth_ck = line_new;
+            }
+            else if (a == 3) {           // line orth的最后一个元素
+                Eigen::Vector4d line_new;
+                Eigen::Vector4d delta_l;
+                delta_l.setZero();
+                delta_l[3]= delta.x();
+                local_parameterization_line->Plus(line_orth_ck.data(),delta_l.data(),line_new.data());
+                line_orth_ck = line_new;
+            }
+
+            Vector6d line_w_ck = orth_to_plk(line_orth_ck);
+
+            Eigen::Matrix3d Rwc_ck(Qi_ck);
+            Eigen::Vector3d twc_ck(Pi_ck);
+            Vector6d line_c_ck = plk_from_pose(line_w_ck, Rwc_ck, twc_ck);
+
+            // 直线的投影矩阵K为单位阵
+            Eigen::Vector3d nc_ck = line_c_ck.head(3);
+            double l_norm_ck = nc_ck(0) * nc_ck(0) + nc_ck(1) * nc_ck(1);
+            double l_sqrtnorm_ck = sqrt( l_norm_ck );
+            double l_trinorm_ck = l_norm_ck * l_sqrtnorm_ck;
+
+            double e1_ck = obs_i(0) * nc_ck(0) + obs_i(1) * nc_ck(1) + nc_ck(2);
+            double e2_ck = obs_i(2) * nc_ck(0) + obs_i(3) * nc_ck(1) + nc_ck(2);
+            Eigen::Vector2d tmp_residual;
+            tmp_residual(0) = e1_ck/l_sqrtnorm_ck;
+            tmp_residual(1) = e2_ck/l_sqrtnorm_ck;
+            tmp_residual = sqrt_info * tmp_residual;
+
+            num_jacobian.col(k) = (tmp_residual - residual) / eps;
+
+        }
+        std::cout <<"num_jacobian:\n"<< num_jacobian <<"\n"<< std::endl;
+    }
+
+
+    return true;
+}
+
+Eigen::Matrix2d lineProjectionRightFactor::sqrt_info;
+
+lineProjectionRightFactor::lineProjectionRightFactor(const Eigen::Vector4d &_obs_i) : obs_i(_obs_i)
+{
+};
+
+bool lineProjectionRightFactor::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
+{
+    Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
+    Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
+
+    Eigen::Vector3d Pex(parameters[1][0], parameters[1][1], parameters[1][2]);
+    Eigen::Quaterniond Qex(parameters[1][6], parameters[1][3], parameters[1][4], parameters[1][5]);
+
+    Eigen::Vector4d line_orth( parameters[2][0],parameters[2][1],parameters[2][2],parameters[2][3] );
+    Vector6d line_w = orth_to_plk(line_orth);
+
+    Eigen::Matrix3d Rwl(Qi);
+    Eigen::Vector3d twl(Pi);
+    Vector6d line_l = plk_from_pose(line_w, Rwl, twl);
+    //std::cout << line_b.norm() <<"\n";
+    Eigen::Matrix3d Rlr(Qex);
+    Eigen::Vector3d tlr(Pex);
+    Vector6d line_c = plk_from_pose(line_l, Rlr, tlr);
+
+    // 直线的投影矩阵K为单位阵
+    Eigen::Vector3d nc = line_c.head(3);
+    double l_norm = nc(0) * nc(0) + nc(1) * nc(1);
+    double l_sqrtnorm = sqrt( l_norm );
+    double l_trinorm = l_norm * l_sqrtnorm;
+
+    double e1 = obs_i(0) * nc(0) + obs_i(1) * nc(1) + nc(2);
+    double e2 = obs_i(2) * nc(0) + obs_i(3) * nc(1) + nc(2);
+    Eigen::Map<Eigen::Vector2d> residual(residuals);
+    residual(0) = e1/l_sqrtnorm;
+    residual(1) = e2/l_sqrtnorm;
+
+    double line_len = std::sqrt( std::pow( (obs_i(0) - obs_i(2) ), 2 ) + std::pow( (obs_i(1) - obs_i(3) ), 2 ) );
+//    sqrt_info.setIdentity();
+    residual = sqrt_info * residual;
+//    std::cout<< residual.transpose() <<std::endl;
+    if (jacobians)
+    {
+
+        Eigen::Matrix<double, 2, 3> jaco_e_l(2, 3);
+        jaco_e_l << (obs_i(0)/l_sqrtnorm - nc(0) * e1 / l_trinorm ), (obs_i(1)/l_sqrtnorm - nc(1) * e1 / l_trinorm ), 1.0/l_sqrtnorm,
+                (obs_i(2)/l_sqrtnorm - nc(0) * e2 / l_trinorm ), (obs_i(3)/l_sqrtnorm - nc(1) * e2 / l_trinorm ), 1.0/l_sqrtnorm;
+
+        jaco_e_l = sqrt_info * jaco_e_l;
+
+        Eigen::Matrix<double, 3, 6> jaco_l_Lc(3, 6);
+        jaco_l_Lc.setZero();
+        jaco_l_Lc.block(0,0,3,3) = Eigen::Matrix3d::Identity();
+
+        Eigen::Matrix<double, 2, 6> jaco_e_Lc;
+        jaco_e_Lc = jaco_e_l * jaco_l_Lc / line_len;
+        //std::cout <<jaco_e_Lc<<"\n\n";
+        //std::cout << "jacobian_calculator:" << std::endl;
+        if (jacobians[0])
+        {
+            //std::cout <<"jacobian_pose_i"<<"\n";
+            Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
+
+            Matrix6d invTlr;
+            invTlr << Rlr.transpose(), -Rlr.transpose()*skew_symmetric(tlr),
+                    Eigen::Matrix3d::Zero(),  Rlr.transpose();
+
+            Vector3d nw = line_w.head(3);
+            Vector3d dw = line_w.tail(3);
+            Eigen::Matrix<double, 6, 6> jaco_Lc_pose;
+            jaco_Lc_pose.setZero();
+            jaco_Lc_pose.block(0,0,3,3) = Rwl.transpose() * skew_symmetric(dw);   // Lc_t
+            jaco_Lc_pose.block(0,3,3,3) = skew_symmetric( Rwl.transpose() * (nw + skew_symmetric(dw) * twl) );  // Lc_theta
+            jaco_Lc_pose.block(3,3,3,3) = skew_symmetric( Rwl.transpose() * dw);
+
+            jaco_Lc_pose = invTlr * jaco_Lc_pose;
+            //std::cout <<invTlr<<"\n"<<jaco_Lc_pose<<"\n\n";
+
+            jacobian_pose_i.leftCols<6>() = jaco_e_Lc * jaco_Lc_pose;
+
+            //std::cout <<jacobian_pose_i<<"\n\n";
+
+            jacobian_pose_i.rightCols<1>().setZero();            //最后一列设成0
+        }
+
+        if (jacobians[1])
+        {
+
+            //std::cout <<"jacobian_ex_pose"<<"\n";
+            Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor>> jacobian_ex_pose(jacobians[1]);
+
+            Vector3d nb = line_l.head(3);
+            Vector3d db = line_l.tail(3);
+            Eigen::Matrix<double, 6, 6> jaco_Lc_ex;
+            jaco_Lc_ex.setZero();
+            jaco_Lc_ex.block(0,0,3,3) = Rlr.transpose() * skew_symmetric(db);   // Lc_t
+            jaco_Lc_ex.block(0,3,3,3) = skew_symmetric( Rlr.transpose() * (nb + skew_symmetric(db) * tlr) );  // Lc_theta
+            jaco_Lc_ex.block(3,3,3,3) = skew_symmetric( Rlr.transpose() * db);
+
+            jacobian_ex_pose.leftCols<6>() = jaco_e_Lc * jaco_Lc_ex;
+            jacobian_ex_pose.rightCols<1>().setZero();
+        }
+        if (jacobians[2])
+        {
+            Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor>> jacobian_lineOrth(jacobians[2]);
+
+            Eigen::Matrix3d Rwc = Rwl * Rlr;
+            Eigen::Vector3d twc = Rwl * tlr + twl;
+            Matrix6d invTwc;
+            invTwc << Rwc.transpose(), -Rwc.transpose()*skew_symmetric(twc),
+                    Eigen::Matrix3d::Zero(),  Rwc.transpose();
+            //std::cout<<invTwc<<"\n";
+
+            Vector3d nw = line_w.head(3);
+            Vector3d vw = line_w.tail(3);
+            Vector3d u1 = nw/nw.norm();
+            Vector3d u2 = vw/vw.norm();
+            Vector3d u3 = u1.cross(u2);
+            Vector2d w( nw.norm(), vw.norm() );
+            w = w/w.norm();
+
+            Eigen::Matrix<double, 6, 4> jaco_Lw_orth;
+            jaco_Lw_orth.setZero();
+            jaco_Lw_orth.block(3,0,3,1) = w[1] * u3;
+            jaco_Lw_orth.block(0,1,3,1) = -w[0] * u3;
+            jaco_Lw_orth.block(0,2,3,1) = w(0) * u2;
+            jaco_Lw_orth.block(3,2,3,1) = -w(1) * u1;
+            jaco_Lw_orth.block(0,3,3,1) = -w(1) * u1;
+            jaco_Lw_orth.block(3,3,3,1) = w(0) * u2;
+
+            //std::cout<<jaco_Lw_orth<<"\n";
+
+            jacobian_lineOrth = jaco_e_Lc * invTwc * jaco_Lw_orth;
+        }
     }
 
     if (jacobians && jacobians[0] && jacobians[1] && 0)

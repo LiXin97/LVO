@@ -93,6 +93,10 @@ int main(int argc, char **argv)
     Eigen::Matrix4d init = Eigen::Matrix4d::Identity();
     bool get_init = true;
     // Main loop
+
+    std::shared_ptr<LVO::MonoParam> paraml = std::make_shared< LVO::MonoParam >(), paramr = std::make_shared< LVO::MonoParam >();
+    std::shared_ptr<LVO::StereoMatchParam> stereoparam = std::make_shared< LVO::StereoMatchParam >();
+
     for(int ni=begin ; ni<end; ni++)
     {
         TicToc time;
@@ -114,8 +118,6 @@ int main(int argc, char **argv)
 
         cv::imshow("imLeftRect", imLeftRect);
 
-        std::shared_ptr<LVO::MonoParam> paraml = std::make_shared< LVO::MonoParam >(), paramr = std::make_shared< LVO::MonoParam >();
-        std::shared_ptr<LVO::StereoMatchParam> stereoparam = std::make_shared< LVO::StereoMatchParam >();
         std::shared_ptr< LVO::StereoFrame > stereoframe = std::make_shared< LVO::StereoFrame >(ni, tframe, imLeftRect, paraml, imRightRect, paramr, stereoparam);
         odo.input_frame(stereoframe);
 

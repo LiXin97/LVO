@@ -88,11 +88,19 @@ namespace LVO
             right->set_Twc( Twc_input*Trl );
         }
 
+        void update_Twc(const Eigen::Matrix4d& Twc_input)
+        {
+            left->set_Twc(Twc_input);
+            right->set_Twc( Twc_input*Trl );
+        }
+
         std::tuple< Eigen::Matrix4d, Eigen::Matrix4d > get_Twc(){return std::make_tuple( left->get_Twc(), right->get_Twc() );}
 
         std::tuple< Eigen::Matrix4d, Eigen::Matrix4d > get_Twc_ex(){return std::make_tuple( left->get_Twc(), stereo_param->Tlr );}
 
         std::vector< LineFeature > get_obs(){return all_obersves;}
+
+        int get_obs_num(){return all_obersves.size();}
 
         void set_lineid( std::vector< long >& line_id ){ all_line_id = line_id; }
         

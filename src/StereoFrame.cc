@@ -101,6 +101,9 @@ namespace LVO
     {
         left = std::make_shared<Frame>(_StereoframeId*2, _TimeStamp, _LeftImg, leftparam);
         right = std::make_shared<Frame>(_StereoframeId*2 + 1, _TimeStamp, _RightImg, rightparam);
+
+        Eigen::Matrix4d Iden = Eigen::Matrix4d::Identity();
+        this->set_Twc(Iden);
         //stereo match
         match_stereo_line();
     }
