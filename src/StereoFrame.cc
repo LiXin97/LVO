@@ -104,6 +104,8 @@ namespace LVO
 
         Eigen::Matrix4d Iden = Eigen::Matrix4d::Identity();
         this->set_Twc(Iden);
+
+        Tlr = stereo_param->Tlr;
         //stereo match
         match_stereo_line();
     }

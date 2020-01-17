@@ -84,14 +84,15 @@ namespace LVO
         void set_Twc(const Eigen::Matrix4d& Twc_input)
         {
             left->set_Twc(Twc_input);
-            Eigen::Matrix4d Trl = stereo_param->Tlr;
-            right->set_Twc( Twc_input*Trl );
+            Eigen::Matrix4d Trl_local = stereo_param->Tlr;
+            right->set_Twc( Twc_input*Trl_local );
         }
 
         void update_Twc(const Eigen::Matrix4d& Twc_input)
         {
             left->set_Twc(Twc_input);
-            right->set_Twc( Twc_input*Trl );
+            Eigen::Matrix4d Twc_r = Twc_input*Tlr;
+            right->set_Twc( Twc_r );
         }
 
         std::tuple< Eigen::Matrix4d, Eigen::Matrix4d > get_Twc(){return std::make_tuple( left->get_Twc(), right->get_Twc() );}
@@ -123,7 +124,7 @@ namespace LVO
 
         std::vector<cv::line_descriptor::KeyLine> left_match_lines, right_match_lines;
 
-        Eigen::Matrix4d Trl;
+        Eigen::Matrix4d Tlr;
     };
 }
 

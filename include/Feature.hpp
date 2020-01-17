@@ -118,13 +118,32 @@ namespace LVO{
             obs.emplace(stereo_id*2+1, ob_r);
         }
 
-        void remove_frame(long id)
+        void remove_frame(long id,  const std::map<long, Eigen::Matrix4d>& frame_map)
         {
-            // test
-            // TODO update the parameter
+            // TODO test
+            //
             if(id == obs.begin()->first)
             {
+                Eigen::Matrix<double, 6, 1> plk_w;
+                auto obs_it = obs.begin();
+                {
+                    auto iter = frame_map.find(obs_it->first);
+                    Eigen::Matrix4d Twc = iter->second;
 
+                    Eigen::Vector3d twc = Twc.block(0, 3, 3, 1);
+                    Eigen::Matrix3d Rwc = Twc.block(0, 0, 3, 3);
+                    plk_w = plk_translation( plucker_cam, Rwc, twc );
+                }
+
+                {
+                    obs_it++;
+                    auto iter = frame_map.find(obs_it->first);
+                    Eigen::Matrix4d Twc = iter->second;
+
+                    Eigen::Vector3d twc = Twc.block(0, 3, 3, 1);
+                    Eigen::Matrix3d Rwc = Twc.block(0, 0, 3, 3);
+                    plucker_cam = plk_from_pose(plk_w, Rwc, twc);
+                }
             }
             obs.erase(id);
         }
@@ -171,6 +190,22 @@ namespace LVO{
             return orth;
         }
 
+        void set_orth_w( const Eigen::Vector4d& orth, const std::map<long, Eigen::Matrix4d>& frame_map )
+        {
+            Eigen::Matrix<double, 6, 1> plk_w = orth_to_plk(orth);
+
+
+            auto iter = frame_map.find(obs.begin()->first);
+            Eigen::Matrix4d Twc = iter->second;
+
+            Eigen::Vector3d twc = Twc.block(0, 3, 3, 1);
+            Eigen::Matrix3d Rwc = Twc.block(0, 0, 3, 3);
+
+            Eigen::Matrix<double, 6, 1> line_c = plk_from_pose(plk_w, Rwc, twc);
+
+            plucker_cam = line_c;
+        }
+
 
         Eigen::Matrix<double, 6, 1> plk_translation( const Eigen::Matrix<double, 6, 1>& plk, const Eigen::Matrix3d& R, const Eigen::Vector3d& t )
         {
@@ -197,7 +232,7 @@ namespace LVO{
         std::map<long, LineFeatureOb> obs;  // < frame_id, observe >
         cv::Mat descri;
 
-        double mini_tri_angle = 1.;
+        double mini_tri_angle = 1.5;
 
         // TODO 生命周期过长的特征直接删除？
         int age = 1;

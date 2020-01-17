@@ -60,7 +60,7 @@ namespace LVO
             for(auto ite = iter; iter != SW_features.end(); ite = iter)
             {
                 iter++;
-                ite->second.remove_frame(id);
+                ite->second.remove_frame(id, SW_frames);
                 if(ite->second.num_obs() < 1)
                 {
                     SW_features.erase(ite);

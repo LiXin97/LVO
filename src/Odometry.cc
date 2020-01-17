@@ -11,6 +11,7 @@ namespace LVO
     void Odometry::input_frame(std::shared_ptr<LVO::StereoFrame> &stereoframe)
     {
         cur_frame = stereoframe;
+
         tracking();
     }
 
@@ -130,11 +131,41 @@ namespace LVO
 
                     // 滑窗优化
 
+                    optimization_SW();
+
+                    // 重投影误差过大的线，直接去三角化
+
                     // 滑窗
                     {
                         if(need_kf) add_keyframe();
 
                         std::cout << "SW_frames.size() = " << SW_frames.size() << std::endl;
+
+                        {
+                            if( SW_frames.size() > odoParam.SW_frame_size*2 )
+                            {
+                                if(need_kf)
+                                {
+                                    auto it0 = SW_frames.begin();
+                                    auto it1 = SW_frames.begin();
+                                    it1++;
+                                    remove_frame( it0->first );
+                                    remove_frame( it1->first );
+                                    SW_frames.erase(it0);
+                                    SW_frames.erase(it1);
+                                }
+
+                                {
+                                    auto it0 = SW_frames.rbegin(); it0++;it0++;
+                                    auto it1 = SW_frames.rbegin(); it1++;it1++;
+                                    it1++;
+                                    remove_frame( it0->first );
+                                    remove_frame( it1->first );
+                                    SW_frames.erase(it0->first);
+                                    SW_frames.erase(it1->first);
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -187,6 +218,210 @@ namespace LVO
         Eigen::Matrix4d Twcc = cur_frame->get_left_frame()->get_Twc();
 
         motion_velocity = Twcl.inverse()*Twcc;
+    }
+
+    void Odometry::optimization_SW()
+    {
+        lineProjectionFactor::sqrt_info  = 460 / 1.5 * Eigen::Matrix2d::Identity();
+        lineProjectionRightFactor::sqrt_info  = 460 / 1.5 * Eigen::Matrix2d::Identity();
+        ceres::Problem problem;
+
+        //找到特征和帧的对应关系
+        std::map< long, int > frameid_index;
+        std::vector< std::pair< long, Eigen::Matrix4d > > frameid_Twcs;
+        {
+            int index = 0;
+            for(auto &frame:SW_frames)
+            {
+                frameid_Twcs.emplace_back( frame.first, frame.second );
+                frameid_index.emplace( frame.first, index++ );
+            }
+        }
+
+        std::vector< std::vector< std::pair<int, Eigen::Vector4d> >> index_observe_s;
+        std::vector< Eigen::Vector4d > features_param;
+        {
+            for(auto &id_feature:SW_features)
+            {
+                auto &feature = id_feature.second;
+                if(feature.is_tri())
+                {
+                    Eigen::Vector4d feature_param = feature.get_orth_w(SW_frames);
+                    features_param.push_back( feature_param );
+                    auto obs = feature.get_obs();
+                    std::vector< std::pair<int, Eigen::Vector4d> > index_obs_s;
+                    for(auto &ob:obs)
+                    {
+                        int frameindex = frameid_index[ob.first];
+                        Eigen::Vector4d ob4d = ob.second.get4dob();
+                        index_obs_s.emplace_back( frameindex, ob4d );
+                    }
+                    index_observe_s.push_back(index_obs_s);
+                }
+            }
+        }
+
+        Eigen::Matrix4d Tlr = cur_frame->get_stereo_param()->Tlr;
+
+
+        double para_Feature_line[features_param.size()][4];
+        for(int index = 0; index<features_param.size(); ++index)
+        {
+            Eigen::Vector4d orth = features_param[index];
+
+            para_Feature_line[index][0] = orth[0];
+            para_Feature_line[index][1] = orth[1];
+            para_Feature_line[index][2] = orth[2];
+            para_Feature_line[index][3] = orth[3];
+
+            ceres::LocalParameterization *local_parameterization = new LineOrthParameterization();
+            problem.AddParameterBlock(para_Feature_line[index], 4, local_parameterization);
+        }
+
+        double para_Pose[frameid_Twcs.size()][7];
+        for(int index = 0; index<frameid_Twcs.size(); ++index)
+        {
+            auto& Twc = frameid_Twcs[index].second;
+            Eigen::Matrix3d Rot = Twc.block(0,0,3,3);
+            Eigen::Vector3d Tran = Twc.block(0,3,3,1);
+            Eigen::Quaterniond qua(Rot);
+
+//            std::cout << "Twc = " << std::endl << Twc << std::endl;
+
+            para_Pose[index][0] = Tran(0);
+            para_Pose[index][1] = Tran(1);
+            para_Pose[index][2] = Tran(2);
+            para_Pose[index][3] = qua.x();
+            para_Pose[index][4] = qua.y();
+            para_Pose[index][5] = qua.z();
+            para_Pose[index][6] = qua.w();
+
+            ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
+            problem.AddParameterBlock(para_Pose[index], 7, local_parameterization);
+        }
+
+
+        double para_Pose_lr[7];
+        {
+            Eigen::Matrix3d Rot = Tlr.block(0,0,3,3);
+            Eigen::Vector3d Tran = Tlr.block(0,3,3,1);
+            Eigen::Quaterniond qua(Rot);
+
+            para_Pose_lr[0] = Tran(0);
+            para_Pose_lr[1] = Tran(1);
+            para_Pose_lr[2] = Tran(2);
+            para_Pose_lr[3] = qua.x();
+            para_Pose_lr[4] = qua.y();
+            para_Pose_lr[5] = qua.z();
+            para_Pose_lr[6] = qua.w();
+
+            ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
+            problem.AddParameterBlock(para_Pose_lr, 7, local_parameterization);
+            problem.SetParameterBlockConstant( para_Pose_lr );
+        }
+
+
+        for(int index = 0; index < index_observe_s.size(); ++index)
+        {
+            if(index_observe_s[index].size() < 3) continue;
+            for( int index_in=0;index_in<index_observe_s[index].size();++index_in )
+            {
+                auto& index_ob4d = index_observe_s[index][index_in];
+                auto frameindex = index_ob4d.first;
+                auto& ob4d = index_ob4d.second;
+
+                if( frameid_Twcs[frameindex].first % 2 == 0 )
+                {
+                    ceres::LossFunction* loss_function = nullptr;
+                    loss_function = new ceres::CauchyLoss(1.);
+
+                    auto cost_function = new lineProjectionFactor( ob4d );
+                    problem.AddResidualBlock(cost_function, loss_function, para_Pose[frameindex], para_Feature_line[index]);
+                }
+                else
+                {
+                    ceres::LossFunction* loss_function = nullptr;
+                    loss_function = new ceres::CauchyLoss(1.);
+
+                    auto cost_function = new lineProjectionRightFactor( ob4d );
+                    problem.AddResidualBlock(cost_function, loss_function, para_Pose[frameindex-1], para_Pose_lr, para_Feature_line[index]);
+                }
+            }
+        }
+
+
+        ceres::Solver::Options options;
+        options.linear_solver_type = ceres::SPARSE_SCHUR;
+        options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;  // LEVENBERG_MARQUARDT  DOGLEG
+//    options.linear_solver_type = ceres::SPARSE_SCHUR; // SPARSE_NORMAL_CHOLESKY  or SPARSE_SCHUR
+        options.max_num_iterations = 20;
+        options.minimizer_progress_to_stdout = false;
+
+        TicToc solver_time;
+        ceres::Solver::Summary summary;
+        ceres::Solve (options, &problem, & summary);
+
+        std::cout << summary.BriefReport()<<std::endl;
+//        std::cout << summary.FullReport() <<std::endl;
+
+
+        {
+            int index = 0;
+            for(auto &frame:SW_frames)
+            {
+                if(index % 2 == 0)
+                {
+                    Eigen::Matrix4d Twc;
+                    Eigen::Quaterniond qua(para_Pose[index][6], para_Pose[index][3], para_Pose[index][4], para_Pose[index][5]);
+                    Eigen::Matrix3d rot = qua.toRotationMatrix();
+                    Eigen::Vector3d tran(para_Pose[index][0], para_Pose[index][1], para_Pose[index][2]);
+                    Twc.block(0,3,3,1) = tran;
+                    Twc.block(0,0,3,3) = rot;
+
+                    frame.second = Twc;
+                }
+                else
+                {
+                    Eigen::Matrix4d Twl;
+                    Eigen::Quaterniond qua(para_Pose[index-1][6], para_Pose[index-1][3], para_Pose[index-1][4], para_Pose[index-1][5]);
+                    Eigen::Matrix3d rot = qua.toRotationMatrix();
+                    Eigen::Vector3d tran(para_Pose[index-1][0], para_Pose[index-1][1], para_Pose[index-1][2]);
+                    Twl.block(0,3,3,1) = tran;
+                    Twl.block(0,0,3,3) = rot;
+
+                    frame.second = Twl*Tlr;
+                }
+                index++;
+            }
+        }
+
+        {
+            int index = 0;
+            for(auto &id_feature:SW_features)
+            {
+                auto &feature = id_feature.second;
+                if(feature.is_tri())
+                {
+
+                    Eigen::Vector4d line_orth(para_Feature_line[index][0], para_Feature_line[index][1], para_Feature_line[index][2], para_Feature_line[index][3]);
+
+                    feature.set_orth_w( line_orth, SW_frames );
+
+                    index++;
+                }
+            }
+        }
+
+//        std::cout << "before opti " << std::endl << Twc << std::endl;
+//
+//        {
+//            Eigen::Quaterniond qua(para_Pose[0][6], para_Pose[0][3], para_Pose[0][4], para_Pose[0][5]);
+//            Eigen::Matrix3d rot = qua.toRotationMatrix();
+//            Eigen::Vector3d tran(para_Pose[0][0], para_Pose[0][1], para_Pose[0][2]);
+//            Twc.block(0,3,3,1) = tran;
+//            Twc.block(0,0,3,3) = rot;
+//        }
+//        std::cout << "after opti " << std::endl << Twc << std::endl;
     }
 
 #define TRACK_MOTION_DEBUG 0
@@ -366,7 +601,8 @@ namespace LVO
 
     void Odometry::optimization_curpose( Eigen::Matrix4d& Twc, const Eigen::Matrix4d& Tlr, const std::map<int, int>& match )
     {
-        lineProjectionFactor::sqrt_info  = 240 / 1.5 * Eigen::Matrix2d::Identity();
+        lineProjectionFactor::sqrt_info  = 460 / 1.5 * Eigen::Matrix2d::Identity();
+        lineProjectionRightFactor::sqrt_info  = 460 / 1.5 * Eigen::Matrix2d::Identity();
         ceres::Problem problem;
 
         std::vector<long> frameids;
