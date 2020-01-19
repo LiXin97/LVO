@@ -33,6 +33,8 @@ namespace LVO
         bool track_motion_mode();
         bool track_sw();
 
+        void retri_linefeatrues();
+
         void optimization_SW();
         void optimization_curpose( Eigen::Matrix4d& Twc, const Eigen::Matrix4d& Tlr, const std::map<int, int>& match );
 

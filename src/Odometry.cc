@@ -89,7 +89,6 @@ namespace LVO
 
             if(OK)
             {
-                update_velocity();
 
                 {
                     SW_frames.emplace(cur_frame->get_left_frame()->get_id(), cur_frame->get_left_frame()->get_Twc());
@@ -131,9 +130,20 @@ namespace LVO
 
                     // 滑窗优化
 
+                    // TODO 滑窗优化之后是不是应该更新一下速度呢？
                     optimization_SW();
-
+                    {
+                        update_velocity();
+//                        if(SW_frames.size()>8)
+//                        {
+//                            auto it0 = SW_frames.rbegin(); it0++;
+//                            cur_frame->get_left_frame()->set_Twc( it0->second );
+//                            auto it1 = SW_frames.rbegin(); it1++;it1++;it1++;
+//                            last_frame->get_left_frame()->set_Twc( it1->second );
+//                        }
+                    }
                     // 重投影误差过大的线，直接去三角化
+                    retri_linefeatrues();
 
                     // 滑窗
                     {
@@ -151,18 +161,18 @@ namespace LVO
                                     it1++;
                                     remove_frame( it0->first );
                                     remove_frame( it1->first );
-                                    SW_frames.erase(it0);
                                     SW_frames.erase(it1);
+                                    SW_frames.erase(it0);
                                 }
-
+                                else
                                 {
-                                    auto it0 = SW_frames.rbegin(); it0++;it0++;
-                                    auto it1 = SW_frames.rbegin(); it1++;it1++;
+                                    auto it0 = SW_frames.rbegin(); it0++;it0++;it0++;it0++;
+                                    auto it1 = SW_frames.rbegin(); it1++;it1++;it1++;it1++;
                                     it1++;
                                     remove_frame( it0->first );
                                     remove_frame( it1->first );
-                                    SW_frames.erase(it0->first);
                                     SW_frames.erase(it1->first);
+                                    SW_frames.erase(it0->first);
                                 }
                             }
                         }
@@ -172,6 +182,15 @@ namespace LVO
 //                if(need_keyframe()) add_keyframe();
                 last_frame = cur_frame;
             }
+        }
+    }
+
+    void Odometry::retri_linefeatrues()
+    {
+        // 分两种情况，一种是平均重投影误差过大，直接重新tri；一种是某个观测的重投影过大，删去观测
+        for(auto &id_feature:SW_features)
+        {
+            id_feature.second.retri_check(SW_frames);
         }
     }
 
@@ -187,7 +206,7 @@ namespace LVO
         Eigen::Vector3d cur_frame_t = std::get<0>(cur_frame->get_Twc_ex()).block(0,3,3,1);
         double distance = (last_keyframe_t - cur_frame_t).norm();
 
-        return distance > 0.1;
+        return distance > 0.05;
     }
 
     void Odometry::add_keyframe()
@@ -298,6 +317,8 @@ namespace LVO
 
             ceres::LocalParameterization *local_parameterization = new PoseLocalParameterization();
             problem.AddParameterBlock(para_Pose[index], 7, local_parameterization);
+            if(index < 2)
+            problem.SetParameterBlockConstant( para_Pose[index] );
         }
 
 
@@ -412,16 +433,6 @@ namespace LVO
             }
         }
 
-//        std::cout << "before opti " << std::endl << Twc << std::endl;
-//
-//        {
-//            Eigen::Quaterniond qua(para_Pose[0][6], para_Pose[0][3], para_Pose[0][4], para_Pose[0][5]);
-//            Eigen::Matrix3d rot = qua.toRotationMatrix();
-//            Eigen::Vector3d tran(para_Pose[0][0], para_Pose[0][1], para_Pose[0][2]);
-//            Twc.block(0,3,3,1) = tran;
-//            Twc.block(0,0,3,3) = rot;
-//        }
-//        std::cout << "after opti " << std::endl << Twc << std::endl;
     }
 
 #define TRACK_MOTION_DEBUG 0
@@ -714,7 +725,7 @@ namespace LVO
 
 //        std::cout << summary.FullReport()<<std::endl;
 
-        std::cout << "before opti " << std::endl << Twc << std::endl;
+//        std::cout << "before opti " << std::endl << Twc << std::endl;
 
         {
             Eigen::Quaterniond qua(para_Pose[0][6], para_Pose[0][3], para_Pose[0][4], para_Pose[0][5]);
@@ -723,7 +734,7 @@ namespace LVO
             Twc.block(0,3,3,1) = tran;
             Twc.block(0,0,3,3) = rot;
         }
-        std::cout << "after opti " << std::endl << Twc << std::endl;
+//        std::cout << "after opti " << std::endl << Twc << std::endl;
     }
 
     void Odometry::show_match(
