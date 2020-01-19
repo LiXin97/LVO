@@ -96,6 +96,9 @@ namespace LVO{
 
         int SW_frame_size = 10;
 
+        int track_motion_mini_line_num = 5;
+        int track_SW_mini_line_num = 5;
+
 //    private:
 
     };

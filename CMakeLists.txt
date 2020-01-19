@@ -59,3 +59,9 @@ target_link_libraries(test_tri_angle LVO_lib ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(test_tracking test/test_tracking.cc)
 target_link_libraries(test_tracking LVO_lib ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_EuRoc_data test/test_EuRoc_data.cc)
+target_link_libraries(test_EuRoc_data LVO_lib ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(test_gui test/test_gui.cc)
+target_link_libraries(test_gui LVO_lib ${CMAKE_THREAD_LIBS_INIT})

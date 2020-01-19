@@ -9,11 +9,11 @@
 #include "line_uti/line_geometry.hpp"
 #include <opencv2/core/eigen.hpp>
 
-std::string PathToSequence = "/home/lixin04/data/photo/MH_05";
-//std::string PathToSequence = "/home/lixin04/data/photo/V1_02_medium/mav0";
+//std::string PathToSequence = "/home/lixin04/data/photo/MH_05";
+std::string PathToSequence = "/home/lixin04/data/photo/V1_02_medium/mav0";
 const std::string ParameterFile = "../config/EuRoc_VR.yaml";
-const std::string GroundTrueFile = "/home/lixin04/output/MH05_TUM.txt";
-//const std::string GroundTrueFile = "/home/lixin04/output/V102_TUM.txt";
+//const std::string GroundTrueFile = "/home/lixin04/output/MH05_TUM.txt";
+const std::string GroundTrueFile = "/home/lixin04/output/V102_TUM.txt";
 
 void LoadStereoCalib( const std::string& ParameterFile, cv::Mat& M1l,cv::Mat& M1r,cv::Mat&M2l,cv::Mat& M2r );
 void LoadImages(const std::string &strPathToSequence, std::vector<std::string> &vstrImageLeft,
@@ -83,10 +83,10 @@ int main(int argc, char **argv)
 
     cv::Mat imLeft, imRight, imLeftRect, imRightRect;
     //error
-    int begin = 500;
+    int begin = 200;
     int end   = 1500;
 
-    LVO::Odometry odo;
+    LVO::Odometry odo(nullptr);
 
     std::vector<cv::Mat> T_all;
     std::vector<long> Time_all;

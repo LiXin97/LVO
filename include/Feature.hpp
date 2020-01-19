@@ -239,6 +239,8 @@ namespace LVO{
 
         std::map<long, LineFeatureOb> get_obs(){return obs;}
 
+        long get_first_frameid() { return obs.begin()->first; }
+
         Eigen::Vector4d get_orth_w( const std::map<long, Eigen::Matrix4d>& frame_map )
         {
             auto iter = frame_map.find(obs.begin()->first);

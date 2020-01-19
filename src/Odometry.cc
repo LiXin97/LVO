@@ -13,6 +13,34 @@ namespace LVO
         cur_frame = stereoframe;
 
         tracking();
+
+        if(state == OdoState::OK)
+        update_gui();
+    }
+
+    void Odometry::update_gui()
+    {
+        std::vector< Eigen::Matrix4d > Twcs;
+        for(const auto& id_Twc:SW_frames)
+        {
+            Twcs.push_back( id_Twc.second );
+        }
+
+        std::vector< Eigen::Vector3d > Lines;
+        for(auto& id_feature:SW_features)
+        {
+            if(id_feature.second.is_tri())
+            {
+                Eigen::Matrix4d Twc = SW_frames.find( id_feature.second.get_first_frameid() )->second;
+
+                auto Line3d = id_feature.second.get3D(Twc);
+
+                Lines.push_back( Line3d.getLeftPoint() );
+                Lines.push_back( Line3d.getRightPoint() );
+            }
+        }
+
+        view->set_elem(Twcs, Lines);
     }
 
     void Odometry::tracking()
@@ -75,16 +103,18 @@ namespace LVO
         else if(state == OdoState::OK)
         {
             bool OK;
-            OK = track_motion_mode();
+            int track_motion_line_num = track_motion_mode();
+            OK = track_motion_line_num > odoParam.track_motion_mini_line_num;
             if(!OK)
             {
-                std::cerr << "track_motion_mode() failed" << std::endl;
+                std::cerr << "track_motion_mode() failed, only " << track_motion_line_num << std::endl;
             }
 
-            OK = track_sw();
+            int track_SW_line_num = track_sw();
+            OK = track_SW_line_num > odoParam.track_SW_mini_line_num;
             if(!OK)
             {
-                std::cerr << "track_sw() failed" << std::endl;
+                std::cerr << "track_sw() failed, only " << track_SW_line_num << std::endl;
             }
 
             if(OK)
@@ -436,7 +466,7 @@ namespace LVO
     }
 
 #define TRACK_MOTION_DEBUG 0
-    bool Odometry::track_motion_mode()
+    int Odometry::track_motion_mode()
     {
         cur_frame->update_Twc( last_frame->get_left_frame()->get_Twc()*motion_velocity );
 
@@ -502,6 +532,7 @@ namespace LVO
 
         auto match_result = matchNNR(cur_des, last_frame_desc);
 
+        if(match_result.size() < odoParam.track_motion_mini_line_num) return match_result.size();
 //        std::cout << "motion match_result.size() = " << match_result.size() << std::endl;
 //        std::cout << "match_result2.size() = " << match_result2.size() << std::endl;
 
@@ -521,11 +552,11 @@ namespace LVO
             show_match( match_result, cur_lines_pixel, last_lines_pixel, cur_frame_id, last_frame_id );
         }
 
-        return match_result.size() > 8;
+        return match_result.size();
     }
 
 #define TRACK_SW_DEBUG 0
-    bool Odometry::track_sw()
+    int Odometry::track_sw()
     {
         cv::Mat sw_desc;
         std::vector< long > sw_feature_ids;
@@ -571,6 +602,7 @@ namespace LVO
         auto match_result = matchNNR(cur_des, sw_desc);
 
 
+        if(match_result.size() < odoParam.track_SW_mini_line_num) return match_result.size();
 //        std::cout << "sw match_result.size() = " << match_result.size() << std::endl;
 
 //        std::cout << "match_result.size() = " << match_result.size() << std::endl;
@@ -594,7 +626,7 @@ namespace LVO
 //            show_match( match_result, cur_lines_pixel, last_lines_pixel, cur_frame_id, last_frame_id );
         }
 
-        return match_result.size() > 8;
+        return match_result.size();
     }
 
     void Odometry::update_cur_frame_feature_id( const std::map<int, int>& match_opti )

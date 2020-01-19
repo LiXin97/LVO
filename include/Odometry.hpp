@@ -8,6 +8,8 @@
 #include "common.hpp"
 #include "Feature.hpp"
 #include "StereoFrame.hpp"
+#include "view.hpp"
+#include "ImageManger.hpp"
 
 #include "optimi/line_projection_factor.hpp"
 #include "optimi/line_parameterization.hpp"
@@ -17,7 +19,7 @@ namespace LVO
 {
     class Odometry{
     public:
-        Odometry()= default;
+        Odometry(std::shared_ptr< View > _view):view(_view){}
         ~Odometry() = default;
 
         enum OdoState
@@ -29,9 +31,11 @@ namespace LVO
 
         void tracking();
 
+        void update_gui();
+
         void track_LastKeyframe();
-        bool track_motion_mode();
-        bool track_sw();
+        int track_motion_mode();
+        int track_sw();
 
         void retri_linefeatrues();
 
@@ -147,6 +151,8 @@ namespace LVO
 
         std::map< long, LineFeature > SW_features;  // < feature_id, observes >
         std::map< long, LineFeature3D > Old_3Dfeatures; // < feature_id, 3D points left right >
+
+        std::shared_ptr< View > view;
     };
 
 }
