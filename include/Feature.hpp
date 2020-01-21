@@ -149,7 +149,6 @@ namespace LVO{
 //                std::cout << "residual =  " << residual.transpose() << std::endl;
                 if(residual(0) > 1.5 || residual(1) > 1.5)
                 {
-
 //                    std::cerr << "bad " << residual.transpose() << std::endl;
                     obs.erase(it);
                 }
@@ -159,7 +158,7 @@ namespace LVO{
             }
 
             projection_error_avg /= num;
-            if(projection_error_avg(0) > 1.5 || projection_error_avg(1) > 1.5)
+            if(projection_error_avg(0) > 1.5 || projection_error_avg(1) > 1.5 || obs.size() < 2)
             {
 //                std::cerr << "retri " << projection_error_avg.transpose() << std::endl;
                 tri = false;

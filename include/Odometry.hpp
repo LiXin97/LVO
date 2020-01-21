@@ -44,11 +44,11 @@ namespace LVO
 
         void update_velocity();
 
-        bool need_keyframe();
+        bool need_keyframe(const int track_motion_line_num, const int track_sw_line_num);
 
         void add_keyframe();
 
-        std::map< int, int > matchNNR(const cv::Mat &desc1, const cv::Mat &desc2, float nnr = 0.75);
+        std::map< int, int > matchNNR(const cv::Mat &desc1, const cv::Mat &desc2, float nnr);
 
 
         // DeBUG

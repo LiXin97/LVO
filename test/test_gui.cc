@@ -49,12 +49,12 @@ int main()
         std::shared_ptr< LVO::StereoFrame > stereoframe = std::make_shared< LVO::StereoFrame >(ni, tframe, left_rect, paraml, right_rect, paramr, stereoparam);
         odo.input_frame(stereoframe);
 
-        cv::imshow("imLeftRect", left_rect);
+//        cv::imshow("imLeftRect", left_rect);
 
 
         std::cout << "GT Twc = " << std::endl << Twcs_true[ni] << std::endl;
 
-        if(cv::waitKey( 1 ) == 27) break;
+//        if(cv::waitKey( 1 ) == 27) break;
 
     }
     return 0;

@@ -9,7 +9,7 @@
 #include <opencv2/core/eigen.hpp>
 
 namespace LVO{
-    enum LineExtractType{ LSD,  };
+    enum LineExtractType{ LSD, FLD };
 // 单目线提取参数
     class MonoParam{
     public:
@@ -49,7 +49,7 @@ namespace LVO{
 
 
         bool equalize = true;
-        LineExtractType line_extract_type = LineExtractType::LSD;
+        LineExtractType line_extract_type = LineExtractType::FLD;
 
         int MaxNumLineFeatures = 300;
         double fx, fy, cx, cy;
@@ -92,7 +92,8 @@ namespace LVO{
 
 
 
-        float match_dist_thread = 30;
+        float match_dist_thread = 50;
+        double nrr_thread = 0.85;
 
         int SW_frame_size = 10;
 
@@ -101,6 +102,13 @@ namespace LVO{
 
 //    private:
 
+    };
+
+    struct sort_flines_by_length
+    {
+        inline bool operator()(const cv::Vec4f& a, const cv::Vec4f& b){
+            return ( sqrt(pow(a(0)-a(2),2.0)+pow(a(1)-a(3),2.0)) > sqrt(pow(b(0)-b(2),2.0)+pow(b(1)-b(3),2.0)) );
+        }
     };
 }
 

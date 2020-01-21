@@ -7,9 +7,14 @@
 
 #include "common.hpp"
 #include "Param.hpp"
+#include "Feature.hpp"
+
 #include <opencv2/line_descriptor.hpp>
 #include <opencv2/features2d.hpp>
-#include "Feature.hpp"
+#include <opencv2/imgproc.hpp>
+#include <opencv2/ximgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
 
 namespace LVO
 {
@@ -27,9 +32,12 @@ namespace LVO
 
         void extract_line_lsd();
 
+        void extract_line_fld();
+
         cv::Mat get_extract_img();
 
         cv::Mat get_img(){return img.clone();}
+        cv::Mat get_img_src(){return img_src.clone();}
 
         std::shared_ptr< MonoParam > get_monoparam(){return mono_param;}
 
@@ -41,6 +49,10 @@ namespace LVO
         cv::Mat get_lbd(){return keylbd_descr.clone();};
 
         long get_id(){return frame_id;}
+
+
+        // DEBUG
+        void test_extract_line_fld();
 
     private:
         long frame_id;

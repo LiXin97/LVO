@@ -86,7 +86,8 @@ int main(int argc, char **argv)
     int begin = 200;
     int end   = 1500;
 
-    LVO::Odometry odo(nullptr);
+    std::shared_ptr< LVO::View > view = std::make_shared< LVO::View >();
+    LVO::Odometry odo(view);
 
     std::vector<cv::Mat> T_all;
     std::vector<long> Time_all;

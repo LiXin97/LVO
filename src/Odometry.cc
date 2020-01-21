@@ -15,7 +15,7 @@ namespace LVO
         tracking();
 
         if(state == OdoState::OK)
-        update_gui();
+            update_gui();
     }
 
     void Odometry::update_gui()
@@ -40,7 +40,10 @@ namespace LVO
             }
         }
 
-        view->set_elem(Twcs, Lines);
+        cv::Mat img = cur_frame->get_left_frame()->get_img_src();
+
+        if(view)
+            view->set_elem(Twcs, Lines, img);
     }
 
     void Odometry::tracking()
@@ -141,6 +144,9 @@ namespace LVO
                             auto observe = ob.get_obs();
                             for(auto &obse:observe)
                                 SW_features[ feature_ids[index] ].insert_ob(obse.first, obse.second);
+
+                            cv::Mat des = ob.get_descri();
+                            SW_features[ feature_ids[index] ].set_descri( des );
                         }
                     }
 
@@ -156,21 +162,21 @@ namespace LVO
                         }
                     }
 
-                    bool need_kf = need_keyframe();
+                    bool need_kf = need_keyframe(track_motion_line_num, track_SW_line_num);
 
                     // 滑窗优化
 
                     // TODO 滑窗优化之后是不是应该更新一下速度呢？
                     optimization_SW();
                     {
+                        if(SW_frames.size()>6)
+                        {
+                            auto it0 = SW_frames.rbegin(); it0++;
+                            cur_frame->get_left_frame()->set_Twc( it0->second );
+                            auto it1 = SW_frames.rbegin(); it1++;it1++;it1++;
+                            last_frame->get_left_frame()->set_Twc( it1->second );
+                        }
                         update_velocity();
-//                        if(SW_frames.size()>8)
-//                        {
-//                            auto it0 = SW_frames.rbegin(); it0++;
-//                            cur_frame->get_left_frame()->set_Twc( it0->second );
-//                            auto it1 = SW_frames.rbegin(); it1++;it1++;it1++;
-//                            last_frame->get_left_frame()->set_Twc( it1->second );
-//                        }
                     }
                     // 重投影误差过大的线，直接去三角化
                     retri_linefeatrues();
@@ -222,12 +228,24 @@ namespace LVO
         {
             id_feature.second.retri_check(SW_frames);
         }
+
+        for(auto &id_feature:SW_features)
+        {
+            auto &feature = id_feature.second;
+            if(feature.is_tri()) continue;
+            feature.tri_two_plane( SW_frames );
+        }
     }
 
     //TODO 关键帧判断
-    bool Odometry::need_keyframe()
+    bool Odometry::need_keyframe(const int track_motion_line_num, const int track_sw_line_num)
     {
         if( SW_frames.size() < ( odoParam.SW_frame_size * 2 ) ) return true;
+
+        std::cout << "track_motion_line_num = " << track_motion_line_num << std::endl;
+        std::cout << "track_sw_line_num = " << track_sw_line_num << std::endl;
+
+        if( track_motion_line_num < 20 ) return true;
 
         auto last_keyframe_id = last_key_frame->get_StereoId();
         auto cur_frame_id = cur_frame->get_StereoId();
@@ -236,7 +254,7 @@ namespace LVO
         Eigen::Vector3d cur_frame_t = std::get<0>(cur_frame->get_Twc_ex()).block(0,3,3,1);
         double distance = (last_keyframe_t - cur_frame_t).norm();
 
-        return distance > 0.05;
+        return distance > 0.15;
     }
 
     void Odometry::add_keyframe()
@@ -529,8 +547,8 @@ namespace LVO
 
 //        auto match_result = matchNNR(last_frame_desc, cur_des);
 
-
-        auto match_result = matchNNR(cur_des, last_frame_desc);
+        if( feature_ids.empty() ) return 0;
+        auto match_result = matchNNR(cur_des, last_frame_desc, odoParam.nrr_thread);
 
         if(match_result.size() < odoParam.track_motion_mini_line_num) return match_result.size();
 //        std::cout << "motion match_result.size() = " << match_result.size() << std::endl;
@@ -598,8 +616,9 @@ namespace LVO
 
 //        auto match_result = matchNNR(last_frame_desc, cur_des);
 
+        if(sw_feature_ids.empty()) return 0;
 
-        auto match_result = matchNNR(cur_des, sw_desc);
+        auto match_result = matchNNR(cur_des, sw_desc, odoParam.nrr_thread);
 
 
         if(match_result.size() < odoParam.track_SW_mini_line_num) return match_result.size();
@@ -745,7 +764,7 @@ namespace LVO
 
 
         ceres::Solver::Options options;
-        options.linear_solver_type = ceres::DENSE_SCHUR;
+        options.linear_solver_type = ceres::SPARSE_SCHUR;
         options.trust_region_strategy_type = ceres::LEVENBERG_MARQUARDT;  // LEVENBERG_MARQUARDT  DOGLEG
 //    options.linear_solver_type = ceres::SPARSE_SCHUR; // SPARSE_NORMAL_CHOLESKY  or SPARSE_SCHUR
         options.max_num_iterations = 10;
@@ -820,7 +839,7 @@ namespace LVO
         std::vector<std::vector<cv::DMatch>> matches_;
         cv::Ptr<cv::line_descriptor::BinaryDescriptorMatcher> bdm_;
         bdm_ = cv::line_descriptor::BinaryDescriptorMatcher::createBinaryDescriptorMatcher();
-        bdm_->knnMatch( desc1, desc2, matches_, 3 );
+        bdm_->knnMatch( desc1, desc2, matches_, 2 );
 
         for (int idx = 0; idx < desc1.rows; ++idx)
         {

@@ -19,11 +19,30 @@ namespace LVO
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        pangolin::View& d_video = pangolin::Display("imgVideo")
+                .SetAspect(752/(float)480);
+
+        pangolin::View& d_kfDepth = pangolin::Display("imgKFDepth")
+                .SetAspect(752/(float)480);
+
+        pangolin::View& d_residual = pangolin::Display("imgResidual")
+                .SetAspect(752/(float)480);
+
+        pangolin::CreateDisplay()
+                .SetBounds(0.0, 0.3, pangolin::Attach::Pix(180), 1.0)
+                .SetLayout(pangolin::LayoutEqual)
+                .AddDisplay(d_video)
+                .AddDisplay(d_kfDepth)
+                .AddDisplay(d_residual);
+
+
         // 新建按钮和选择框，第一个参数为按钮的名字，第二个为默认状态，第三个为是否有选择框
         pangolin::CreatePanel("menu").SetBounds(0.0,1.0,0.0,pangolin::Attach::Pix(175));
         pangolin::Var<bool> menuWhite("menu.Show White",false,true);
+        pangolin::Var<bool> menuShowimg("menu.Show img",true,true);
         pangolin::Var<bool> menuShowLine("menu.Show Line",true,true);
         pangolin::Var<bool> menuShowCamera("menu.Show Camera",true,true);
+        pangolin::Var<bool> menuShowStereoCamera("menu.Show Stereo Camera",false,true);
 
 
         // Define Camera Render Object (for view / scene browsing)
@@ -45,6 +64,10 @@ namespace LVO
                 .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
                 .SetHandler(new pangolin::Handler3D(s_cam));
         d_cam.Activate(s_cam);
+
+
+
+        pangolin::GlTexture imageTexture(752, 480, GL_RGB,false,0,GL_BGR,GL_UNSIGNED_BYTE);
 
         while( !pangolin::ShouldQuit() )
         {
@@ -76,9 +99,22 @@ namespace LVO
 
             if(menuShowLine)
                 draw_lines();
-            if(menuShowCamera)
+            if(menuShowCamera && menuShowStereoCamera)
                 draw_cams();
+            else if(menuShowCamera)
+                draw_leftcams();
 
+
+            if(menuShowimg)
+            {
+                std::unique_lock<std::mutex> lock(gui_mutex);
+                imageTexture.Upload(img.data,GL_BGR,GL_UNSIGNED_BYTE);
+                d_video.Activate();
+                glColor3f(1.0,1.0,1.0);
+                // 注意，这里由于Upload函数无法将cv::Mat格式的图片数据作为输入，因此使用 opencv 的data函数将Mat格式的数据变为uchar格式，但是opencv中Mat存储图片是自下而上的，单纯的渲染所渲染出来的图片是倒置的，因此需使用RenderToViewportFlipY（）函数进行渲染，将原本上下倒置的图片进行自下而上渲染，使显示的图片是正的。
+                // https://blog.csdn.net/u013270341/article/details/74995530
+                imageTexture.RenderToViewportFlipY();
+            }
 
             pangolin::FinishFrame();
         }
@@ -86,8 +122,11 @@ namespace LVO
 
     void View::draw_lines()
     {
-        std::lock_guard<std::mutex> lock(gui_mutex);
+//        std::cout << " now in draw_lines " << std::endl;
+        std::unique_lock<std::mutex> lock(gui_mutex);
+//        std::cout << " now is draw_lines " << std::endl;
 
+//        std::unique_lock<std::mutex> lock(gui_mutex, std::chrono::seconds(1));
         if(Lines.empty()) return;
 
         glLineWidth(4);
@@ -99,9 +138,10 @@ namespace LVO
             glVertex3f(Lines[i-1][0], Lines[i-1][1], Lines[i-1][2]);
         }
         glEnd();
+//        std::cout << " now over draw_lines " << std::endl;
     }
 
-    void View::draw_cam(pangolin::OpenGlMatrix &Twc)
+    inline void View::draw_cam(pangolin::OpenGlMatrix &Twc)
     {
         //相机模型大小：宽度占总宽度比例为0.08
         const float &w = 0.3;
@@ -153,7 +193,8 @@ namespace LVO
 
     void View::draw_cams()
     {
-        std::lock_guard<std::mutex> lock(gui_mutex);
+        std::unique_lock<std::mutex> lock(gui_mutex);
+//        std::unique_lock<std::mutex> lock(gui_mutex, std::chrono::seconds(1));
         if(Twcs.empty()) return;
 
         for(auto &Twc:Twcs)
@@ -162,9 +203,27 @@ namespace LVO
         }
     }
 
-    void View::set_elem(std::vector<Eigen::Matrix4d> &_Twcs, std::vector<Eigen::Vector3d> &_Lines)
+    void View::draw_leftcams()
     {
-        std::lock_guard<std::mutex> lock(gui_mutex);
+//        std::cout << " now in draw_leftcams " << std::endl;
+        std::unique_lock<std::mutex> lock(gui_mutex);
+//        std::cout << " now is draw_leftcams " << std::endl;
+//        std::unique_lock<std::mutex> lock(gui_mutex, std::chrono::seconds(1));
+        if(Twcs.empty()) return;
+
+        for(int i=0;i<Twcs.size();i=i+2)
+        {
+            auto Twc = Twcs[i];
+            draw_cam(Twc);
+        }
+//        std::cout << " now over draw_leftcams " << std::endl;
+    }
+
+    void View::set_elem(std::vector<Eigen::Matrix4d>& _Twcs, std::vector< Eigen::Vector3d >& _Lines, cv::Mat& image)
+    {
+//        std::cout << " now in set_elem " << std::endl;
+        std::unique_lock<std::mutex> lock(gui_mutex);
+//        std::cout << " now is set_elem " << std::endl;
 
         Twcs.clear();
         for(const auto & _Twc : _Twcs)
@@ -197,9 +256,16 @@ namespace LVO
             Twcs.push_back(M);
         }
 
+        Lines.clear();
         for(const auto &line:_Lines)
         {
             Lines.push_back(line);
         }
+
+        if(image.channels() != 3) cv::cvtColor(image, image, cv::COLOR_GRAY2BGR);
+        img = image.clone();
+//        img.resize(  );
+
+//        std::cout << " now over set_elem " << std::endl;
     }
 }

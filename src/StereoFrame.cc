@@ -27,12 +27,117 @@ namespace LVO
                 extract_line_lsd();
                 break;
 
+            case LineExtractType::FLD :
+                extract_line_fld();
+                break;
+
             default:
                 std::cerr << " Wrong Line Extract type " << std::endl;
                 break;
         }
     }
 
+    void Frame::test_extract_line_fld()
+    {
+
+        std::vector<cv::line_descriptor::KeyLine> testline0, testline1;
+
+        int length_threshold = 50;
+        float distance_threshold = 1.41421356f;
+        double canny_th1 = 50.0;
+        double canny_th2 = 50.0;
+        int canny_aperture_size = 5;
+        bool do_merge = true;
+        cv::Ptr<cv::ximgproc::FastLineDetector> fld = cv::ximgproc::createFastLineDetector(length_threshold,
+                                                                                           distance_threshold, canny_th1, canny_th2, canny_aperture_size,
+                                                                                           do_merge);
+
+        std::vector<cv::Vec4f> fld_lines;
+
+        fld->detect( img_src, fld_lines );
+
+        cv::Mat show0 = img_src.clone();
+        if(show0.channels() != 3) cv::cvtColor(show0, show0, cv::COLOR_GRAY2BGR);
+
+        int lowest = 0, highest = 255;
+        int range = (highest - lowest) + 1;
+//        for(auto &line:fld_lines)
+//        {
+//
+//            unsigned int r = lowest + int(rand() % range);
+//            unsigned int g = lowest + int(rand() % range);
+//            unsigned int b = lowest + int(rand() % range);
+//            cv::Point startPoint = cv::Point(int(line[0]), int(line[1]));
+//            cv::Point endPoint = cv::Point(int(line[2]), int(line[3]));
+//            cv::line(show, startPoint, endPoint, cv::Scalar(r, g, b),2 ,8);
+//        }
+//
+//        return show;
+    }
+
+    void Frame::extract_line_fld()
+    {
+        int length_threshold = 50;
+        float distance_threshold = 1.41421356f;
+        double canny_th1 = 50.0;
+        double canny_th2 = 50.0;
+        int canny_aperture_size = 5;
+        bool do_merge = true;
+        cv::Ptr<cv::ximgproc::FastLineDetector> fld = cv::ximgproc::createFastLineDetector(length_threshold,
+                                                           distance_threshold, canny_th1, canny_th2, canny_aperture_size,
+                                                           do_merge);
+
+        std::vector<cv::Vec4f> fld_lines;
+
+        fld->detect( img_src, fld_lines );
+
+        if(fld_lines.size() > mono_param->MaxNumLineFeatures)
+        {
+            std::sort( fld_lines.begin(), fld_lines.end(), sort_flines_by_length() );
+            fld_lines.resize(mono_param->MaxNumLineFeatures);
+        }
+
+
+        // loop over lines object transforming into a vector<KeyLine>
+        keyline.reserve(fld_lines.size());
+        for( int i = 0; i < fld_lines.size(); i++ )
+        {
+            cv::line_descriptor::KeyLine kl;
+            double octaveScale = 1.f;
+            int    octaveIdx   = 0;
+
+            kl.startPointX     = fld_lines[i][0] * octaveScale;
+            kl.startPointY     = fld_lines[i][1] * octaveScale;
+            kl.endPointX       = fld_lines[i][2] * octaveScale;
+            kl.endPointY       = fld_lines[i][3] * octaveScale;
+
+            kl.sPointInOctaveX = fld_lines[i][0];
+            kl.sPointInOctaveY = fld_lines[i][1];
+            kl.ePointInOctaveX = fld_lines[i][2];
+            kl.ePointInOctaveY = fld_lines[i][3];
+
+            kl.lineLength = (float) sqrt( pow( fld_lines[i][0] - fld_lines[i][2], 2 ) + pow( fld_lines[i][1] - fld_lines[i][3], 2 ) );
+
+            kl.angle    = std::atan2( ( kl.endPointY - kl.startPointY ), ( kl.endPointX - kl.startPointX ) );
+            kl.class_id = i;
+            kl.octave   = octaveIdx;
+            kl.size     = ( kl.endPointX - kl.startPointX ) * ( kl.endPointY - kl.startPointY );
+            kl.pt       = cv::Point2f( ( kl.endPointX + kl.startPointX ) / 2, ( kl.endPointY + kl.startPointY ) / 2 );
+
+            kl.response = kl.lineLength / std::max( img.cols, img.rows );
+            cv::LineIterator li( img, cv::Point2f( fld_lines[i][0], fld_lines[i][1] ), cv::Point2f( fld_lines[i][2], fld_lines[i][3] ) );
+            kl.numOfPixels = li.count;
+
+            keyline.push_back( kl );
+        }
+
+
+        // step 2: lbd descriptor
+        cv::Ptr<cv::line_descriptor::BinaryDescriptor> bd_ = cv::line_descriptor::BinaryDescriptor::createBinaryDescriptor( );;
+        //bd_ = BinaryDescriptor::createBinaryDescriptor(  );
+        bd_->compute( img, keyline, keylbd_descr );
+
+    }
 
     // TODO 提取这里还可以研究研究
     void Frame::extract_line_lsd()
@@ -55,12 +160,12 @@ namespace LVO
         // step 2: lbd descriptor
         cv::Ptr<cv::line_descriptor::BinaryDescriptor> bd_ = cv::line_descriptor::BinaryDescriptor::createBinaryDescriptor( );;
         //bd_ = BinaryDescriptor::createBinaryDescriptor(  );
-        bd_->compute( img, line, lbd_descr );
+        bd_->compute( img_src, line, lbd_descr );
 
         for ( int i = 0; i < (int) line.size(); i++ )
         {
 
-            if( line[i].octave == 0 && line[i].lineLength >= 30)
+            if( line[i].octave == 0 && line[i].lineLength >= 60)
             {
                 keyline.push_back( line[i] );
                 keylbd_descr.push_back( lbd_descr.row( i ) );
