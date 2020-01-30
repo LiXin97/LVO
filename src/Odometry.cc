@@ -484,7 +484,7 @@ namespace LVO
     }
 
 #define TRACK_MOTION_DEBUG 0
-    int Odometry::track_motion_mode()
+    std::tuple< int, std::map<int, int> > Odometry::track_motion_mode()
     {
         cur_frame->update_Twc( last_frame->get_left_frame()->get_Twc()*motion_velocity );
 
@@ -570,7 +570,7 @@ namespace LVO
             show_match( match_result, cur_lines_pixel, last_lines_pixel, cur_frame_id, last_frame_id );
         }
 
-        return match_result.size();
+        return std::make_tuple(match_result.size(), match_opti);
     }
 
 #define TRACK_SW_DEBUG 0
