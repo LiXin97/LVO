@@ -106,7 +106,9 @@ namespace LVO
         else if(state == OdoState::OK)
         {
             bool OK;
-            int track_motion_line_num = track_motion_mode();
+            int track_motion_line_num;
+            std::map<int, int> track_map;
+            std::tie( track_motion_line_num, track_map ) = track_motion_mode();
             OK = track_motion_line_num > odoParam.track_motion_mini_line_num;
             if(!OK)
             {

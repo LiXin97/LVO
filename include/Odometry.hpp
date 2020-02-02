@@ -34,7 +34,7 @@ namespace LVO
         void update_gui();
 
         void track_LastKeyframe();
-        int track_motion_mode();
+        std::tuple< int, std::map<int, int> > track_motion_mode();
         int track_sw();
 
         void retri_linefeatrues();
