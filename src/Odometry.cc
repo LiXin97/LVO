@@ -549,10 +549,11 @@ namespace LVO
 
 //        auto match_result = matchNNR(last_frame_desc, cur_des);
 
-        if( feature_ids.empty() ) return 0;
+        std::map<int, int> empty_map;
+        if( feature_ids.empty() ) return std::make_tuple(0, empty_map);
         auto match_result = matchNNR(cur_des, last_frame_desc, odoParam.nrr_thread);
 
-        if(match_result.size() < odoParam.track_motion_mini_line_num) return match_result.size();
+        if(match_result.size() < odoParam.track_motion_mini_line_num) return std::make_tuple(match_result.size(), empty_map);
 //        std::cout << "motion match_result.size() = " << match_result.size() << std::endl;
 //        std::cout << "match_result2.size() = " << match_result2.size() << std::endl;
 
